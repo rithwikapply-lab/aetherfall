@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
+  createSession,
   getSessionState,
   getStoryNodeDetail,
   streamTurnAction,
@@ -9,6 +10,7 @@ export default function MainScreen({
   session,
   onNavigateToGraph,
   onNewCampaign,
+  onStartCampaign,
   pendingReplay, // { fromNodeId, defaultActionText } if returning from Graph screen
   onClearPendingReplay,
 }) {
@@ -20,6 +22,11 @@ export default function MainScreen({
   const [activeReplayNodeId, setActiveReplayNodeId] = useState(null);
   const [lastTurnResult, setLastTurnResult] = useState(null);
   const [error, setError] = useState(null);
+  const [isRestarting, setIsRestarting] = useState(false);
+
+  // Floating delta indicators
+  const [hpIndicator, setHpIndicator] = useState(null);
+  const [focusIndicator, setFocusIndicator] = useState(null);
 
   const narrativeEndRef = useRef(null);
   const inputRef = useRef(null);
@@ -32,6 +39,19 @@ export default function MainScreen({
   useEffect(() => {
     scrollToBottom();
   }, [storyTurns, currentStreamingText]);
+
+  // Floating indicators auto-fade
+  useEffect(() => {
+    if (!hpIndicator) return;
+    const timer = setTimeout(() => setHpIndicator(null), 4500);
+    return () => clearTimeout(timer);
+  }, [hpIndicator]);
+
+  useEffect(() => {
+    if (!focusIndicator) return;
+    const timer = setTimeout(() => setFocusIndicator(null), 4500);
+    return () => clearTimeout(timer);
+  }, [focusIndicator]);
 
   // Initial load: Fetch state and root opening StoryNode
   useEffect(() => {
@@ -110,6 +130,28 @@ export default function MainScreen({
           setCurrentStreamingText('');
           setIsStreaming(false);
 
+          // Trigger floating indicators for HP and Focus if non-zero
+          const delta = turnResult.state_delta;
+          const rawHpDelta = delta.hp_delta || delta.hp_change || 0;
+          const rawFocusDelta = delta.focus_delta || delta.focus_change || 0;
+
+          if (rawHpDelta !== 0) {
+            setHpIndicator({
+              delta: rawHpDelta,
+              reason: delta.hp_delta_reason,
+              isPositive: rawHpDelta > 0,
+              key: Date.now(),
+            });
+          }
+          if (rawFocusDelta !== 0) {
+            setFocusIndicator({
+              delta: rawFocusDelta,
+              reason: delta.focus_delta_reason,
+              isPositive: rawFocusDelta > 0,
+              key: Date.now() + 1,
+            });
+          }
+
           // Append completed turn to history
           setStoryTurns((prev) => [
             ...prev,
@@ -124,6 +166,20 @@ export default function MainScreen({
             },
           ]);
 
+          // Immediate local update if game over
+          if (turnResult.is_game_over) {
+            setSessionState((prev) => ({
+              ...(prev || {}),
+              location: turnResult.location || prev?.location,
+              hp: turnResult.hp,
+              focus: turnResult.focus,
+              turn_count: turnResult.turn_count,
+              is_game_over: true,
+              game_over_reason: turnResult.game_over_reason,
+              game_over_summary: turnResult.game_over_summary,
+            }));
+          }
+
           // Refresh full denormalized world state (inventory, quests, NPCs, stats)
           try {
             const updatedState = await getSessionState(session.id);
@@ -132,23 +188,73 @@ export default function MainScreen({
             console.error('Failed to reload state after turn:', e);
           }
         },
-        onError: (err) => {
-          setError(err.message || 'Stream connection interrupted.');
+        onError: async (err) => {
           setIsStreaming(false);
+          // React to HTTP 400 or game over rejection from the action endpoint
+          if (err.status === 400 || (err.message && err.message.toLowerCase().includes('ended'))) {
+            try {
+              const freshState = await getSessionState(session.id);
+              if (freshState.is_game_over) {
+                setSessionState(freshState);
+                return; // Suppress generic error banner since game-over screen will render
+              }
+            } catch (fetchErr) {
+              console.error('Failed to sync game-over state:', fetchErr);
+            }
+          }
+          setError(err.message || 'Stream connection interrupted.');
         },
       });
     } catch (err) {
-      setError(err.message || 'Action failed to execute.');
       setIsStreaming(false);
+      // React to HTTP 400 rejection from streamTurnAction
+      if (err.status === 400 || (err.message && err.message.toLowerCase().includes('ended'))) {
+        try {
+          const freshState = await getSessionState(session.id);
+          if (freshState.is_game_over) {
+            setSessionState(freshState);
+            return;
+          }
+        } catch (fetchErr) {
+          console.error('Failed to sync game-over state:', fetchErr);
+        }
+      }
+      setError(err.message || 'Action failed to execute.');
     }
   };
 
-  const hpPercent = sessionState
-    ? Math.max(0, Math.min(100, Math.round((sessionState.hp / sessionState.max_hp) * 100)))
-    : 100;
-  const focusPercent = sessionState
-    ? Math.max(0, Math.min(100, Math.round((sessionState.focus / sessionState.max_focus) * 100)))
-    : 100;
+  // Start a fresh campaign from game-over screen
+  const handleStartNewCampaign = async () => {
+    setIsRestarting(true);
+    try {
+      const freshSession = await createSession();
+      if (onStartCampaign) {
+        onStartCampaign(freshSession);
+      } else {
+        onNewCampaign?.();
+      }
+    } catch (err) {
+      console.error('Failed to create new session from game-over screen:', err);
+      onNewCampaign?.();
+    } finally {
+      setIsRestarting(false);
+    }
+  };
+
+  const maxHp = sessionState?.max_hp || 100;
+  const maxFocus = sessionState?.max_focus || 50;
+  const currentHp = sessionState?.hp ?? maxHp;
+  const currentFocus = sessionState?.focus ?? maxFocus;
+
+  const hpPercent = Math.max(0, Math.min(100, Math.round((currentHp / maxHp) * 100)));
+  const focusPercent = Math.max(0, Math.min(100, Math.round((currentFocus / maxFocus) * 100)));
+
+  // Color threshold calculation: default > 40%, amber 20-40%, red < 20%
+  const getThresholdClass = (percent, defaultType) => {
+    if (percent < 20) return 'threshold-red';
+    if (percent <= 40) return 'threshold-amber';
+    return defaultType === 'hp' ? 'threshold-default-hp' : 'threshold-default-focus';
+  };
 
   return (
     <div className="main-layout">
@@ -218,24 +324,60 @@ export default function MainScreen({
               <div className="bar-header">
                 <span className="vital-label">HEALTH</span>
                 <span className="vital-numeric">
-                  {sessionState?.hp ?? 100} / {sessionState?.max_hp ?? 100}
+                  {currentHp} / {maxHp}
                 </span>
               </div>
               <div className="bar-track hp-track">
-                <div className="bar-fill hp-fill" style={{ width: `${hpPercent}%` }} />
+                <div
+                  className={`bar-fill ${getThresholdClass(hpPercent, 'hp')}`}
+                  style={{ width: `${hpPercent}%` }}
+                />
               </div>
+              {hpIndicator && (
+                <div
+                  key={hpIndicator.key}
+                  className={`delta-floating-indicator ${hpIndicator.isPositive ? 'positive' : 'negative'}`}
+                >
+                  <span className="indicator-delta">
+                    {hpIndicator.isPositive ? `+${hpIndicator.delta}` : hpIndicator.delta} HP
+                  </span>
+                  {hpIndicator.reason && (
+                    <span className="indicator-reason">
+                      {' — '}{hpIndicator.reason}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="vital-item bar-vital">
               <div className="bar-header">
                 <span className="vital-label">FOCUS</span>
                 <span className="vital-numeric">
-                  {sessionState?.focus ?? 50} / {sessionState?.max_focus ?? 50}
+                  {currentFocus} / {maxFocus}
                 </span>
               </div>
               <div className="bar-track focus-track">
-                <div className="bar-fill focus-fill" style={{ width: `${focusPercent}%` }} />
+                <div
+                  className={`bar-fill ${getThresholdClass(focusPercent, 'focus')}`}
+                  style={{ width: `${focusPercent}%` }}
+                />
               </div>
+              {focusIndicator && (
+                <div
+                  key={focusIndicator.key}
+                  className={`delta-floating-indicator ${focusIndicator.isPositive ? 'positive' : 'negative'}`}
+                >
+                  <span className="indicator-delta">
+                    {focusIndicator.isPositive ? `+${focusIndicator.delta}` : focusIndicator.delta} Focus
+                  </span>
+                  {focusIndicator.reason && (
+                    <span className="indicator-reason">
+                      {' — '}{focusIndicator.reason}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -310,72 +452,122 @@ export default function MainScreen({
             <div ref={narrativeEndRef} />
           </div>
 
-          {/* Quick Suggestion Chips */}
-          <div className="suggestion-chips">
-            <span className="chips-label">Inspirations:</span>
-            <button
-              type="button"
-              className="chip-btn"
-              disabled={isStreaming}
-              onClick={() => setActionInput('Search the mossy stone alcove for tools.')}
-            >
-              🔍 Search the alcove
-            </button>
-            <button
-              type="button"
-              className="chip-btn"
-              disabled={isStreaming}
-              onClick={() => setActionInput('Ask Kael if he knows where the river is shallow enough to ford.')}
-            >
-              💬 Speak with Kael
-            </button>
-            <button
-              type="button"
-              className="chip-btn"
-              disabled={isStreaming}
-              onClick={() => setActionInput('Attack the bog hound lunging from the marsh with a spear.')}
-            >
-              ⚔️ Attack the hound
-            </button>
-            <button
-              type="button"
-              className="chip-btn"
-              disabled={isStreaming}
-              onClick={() => setActionInput('Scout the old imperial highway for alternative crossings.')}
-            >
-              🧭 Scout the highway
-            </button>
-          </div>
+          {/* Action Input Area OR Game-Over End Screen */}
+          {sessionState?.is_game_over ? (
+            <div className={`game-over-screen ${sessionState.game_over_reason === 'collapse' ? 'theme-collapse' : 'theme-death'}`}>
+              <div className="game-over-badge">
+                {sessionState.game_over_reason === 'death' ? '☠ MORTAL DEMISE' : '👁 SPIRITUAL COLLAPSE'}
+              </div>
+              <h2 className="game-over-headline">
+                {sessionState.game_over_reason === 'death' ? 'You Died' : 'You Broke'}
+              </h2>
 
-          {/* Player Action Input Form */}
-          <form onSubmit={handleActionSubmit} className="action-input-form">
-            <div className="input-wrapper">
-              <input
-                ref={inputRef}
-                type="text"
-                value={actionInput}
-                onChange={(e) => setActionInput(e.target.value)}
-                placeholder={
-                  activeReplayNodeId
-                    ? `Forking alternative action from node ${activeReplayNodeId.slice(0, 8)}...`
-                    : 'What do you want to do? (e.g. "Examine the lantern in the gatehouse...")'
-                }
-                disabled={isStreaming}
-                autoFocus
-              />
-              <button
-                type="submit"
-                className="btn-primary btn-action-send"
-                disabled={isStreaming || !actionInput.trim()}
-              >
-                {isStreaming ? (
-                  <span className="spinner-small" />
-                ) : (
-                  'Take Action ↵'
-                )}
-              </button>
+              {sessionState.game_over_summary && (
+                <p className="game-over-summary">
+                  {sessionState.game_over_summary}
+                </p>
+              )}
+
+              <div className="game-over-meta">
+                <div className="meta-card">
+                  <span className="meta-label">FINAL CHAPTER</span>
+                  <span className="meta-val">{sessionState.chapter || session?.chapter}</span>
+                </div>
+                <div className="meta-card">
+                  <span className="meta-label">TURNS SURVIVED</span>
+                  <span className="meta-val">{sessionState.turn_count || 0}</span>
+                </div>
+                <div className="meta-card">
+                  <span className="meta-label">DEMISE AT</span>
+                  <span className="meta-val">{sessionState.location || 'The Sunken Crossroads'}</span>
+                </div>
+              </div>
+
+              <div className="game-over-actions">
+                <button
+                  type="button"
+                  className="btn-primary btn-game-over-restart"
+                  onClick={handleStartNewCampaign}
+                  disabled={isRestarting}
+                >
+                  {isRestarting ? (
+                    <span className="spinner-small" />
+                  ) : (
+                    '⚔ Start New Campaign'
+                  )}
+                </button>
+              </div>
             </div>
-          </form>
+          ) : (
+            <>
+              {/* Quick Suggestion Chips */}
+              <div className="suggestion-chips">
+                <span className="chips-label">Inspirations:</span>
+                <button
+                  type="button"
+                  className="chip-btn"
+                  disabled={isStreaming}
+                  onClick={() => setActionInput('Search the mossy stone alcove for tools.')}
+                >
+                  🔍 Search the alcove
+                </button>
+                <button
+                  type="button"
+                  className="chip-btn"
+                  disabled={isStreaming}
+                  onClick={() => setActionInput('Ask Kael if he knows where the river is shallow enough to ford.')}
+                >
+                  💬 Speak with Kael
+                </button>
+                <button
+                  type="button"
+                  className="chip-btn"
+                  disabled={isStreaming}
+                  onClick={() => setActionInput('Attack the bog hound lunging from the marsh with a spear.')}
+                >
+                  ⚔️ Attack the hound
+                </button>
+                <button
+                  type="button"
+                  className="chip-btn"
+                  disabled={isStreaming}
+                  onClick={() => setActionInput('Scout the old imperial highway for alternative crossings.')}
+                >
+                  🧭 Scout the highway
+                </button>
+              </div>
+
+              {/* Player Action Input Form */}
+              <form onSubmit={handleActionSubmit} className="action-input-form">
+                <div className="input-wrapper">
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={actionInput}
+                    onChange={(e) => setActionInput(e.target.value)}
+                    placeholder={
+                      activeReplayNodeId
+                        ? `Forking alternative action from node ${activeReplayNodeId.slice(0, 8)}...`
+                        : 'What do you want to do? (e.g. "Examine the lantern in the gatehouse...")'
+                    }
+                    disabled={isStreaming}
+                    autoFocus
+                  />
+                  <button
+                    type="submit"
+                    className="btn-primary btn-action-send"
+                    disabled={isStreaming || !actionInput.trim()}
+                  >
+                    {isStreaming ? (
+                      <span className="spinner-small" />
+                    ) : (
+                      'Take Action ↵'
+                    )}
+                  </button>
+                </div>
+              </form>
+            </>
+          )}
         </div>
 
         {/* Right Column: World State Panels (Inventory, Quests, NPCs) */}

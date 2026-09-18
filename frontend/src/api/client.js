@@ -118,6 +118,8 @@ export async function streamTurnAction(sessionId, {
     if (!res.ok) {
       const errJson = await res.json().catch(() => ({}));
       const error = new Error(errJson.detail || `Action request failed (${res.status})`);
+      error.status = res.status;
+      error.detail = errJson.detail;
       if (onError) onError(error);
       throw error;
     }

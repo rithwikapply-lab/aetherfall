@@ -42,12 +42,13 @@ async def test_pipeline_turn_execution_keyword_flow():
         session_id = game_session.id
         root_node_id = root_node.id
 
-    # Turn 1: Search keyword -> item gained and saved to DB
+    # Turn 1: Search keyword -> item gained and saved to DB (per-turn attrition applies: -1 HP, -2 Focus)
     turn1 = await run_turn(session_id, "Search the mossy stone alcove for salvage.")
     assert turn1.parent_id == root_node_id
     assert turn1.turn_number == 1
     assert len(turn1.state_delta.items_gained) >= 1
-    assert turn1.hp == 100
+    assert turn1.hp == 99
+    assert turn1.focus == 48
 
     async with async_session_maker() as session:
         stmt = select(InventoryItem).where(InventoryItem.session_id == session_id)
@@ -63,7 +64,7 @@ async def test_pipeline_turn_execution_keyword_flow():
     assert turn2.parent_id == turn1.node_id
     assert turn2.turn_number == 2
     assert turn2.state_delta.hp_change < 0
-    assert turn2.hp < 100
+    assert turn2.hp < 99
 
     async with async_session_maker() as session:
         s = await session.get(GameSession, session_id)
@@ -222,3 +223,39 @@ async def test_replay_from_earlier_node_creates_a_branch():
         assert len(child_ids) == 2
         assert node2_id in child_ids
         assert fork_result.node_id in child_ids
+
+
+@pytest.mark.asyncio
+async def test_pipeline_rejects_action_on_game_over_session():
+    """Verify run_turn raises ValueError when invoked on an ended session."""
+    async with async_session_maker() as session:
+        game_session = GameSession(
+            title="Terminated Session",
+            hp=0,
+            max_hp=100,
+            focus=0,
+            max_focus=50,
+            is_game_over=True,
+            game_over_reason="death",
+            game_over_summary="Fell in battle.",
+            location="The Sunken Crossroads",
+            mood="Grim",
+        )
+        session.add(game_session)
+        await session.flush()
+
+        root_node = StoryNode(
+            session_id=game_session.id,
+            parent_id=None,
+            turn_number=0,
+            narration="Opening.",
+            location="The Sunken Crossroads",
+        )
+        session.add(root_node)
+        await session.flush()
+        game_session.current_node_id = root_node.id
+        await session.commit()
+        session_id = game_session.id
+
+    with pytest.raises(ValueError, match="has already ended"):
+        await run_turn(session_id, "Strike the shadow again.")

@@ -30,9 +30,35 @@ async_session_maker = async_sessionmaker(
 
 
 async def init_db() -> None:
-    """Initialize database tables via Base metadata create_all."""
+    """Initialize database tables via Base metadata create_all and apply column migrations."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+        # Incremental migration check for game_sessions
+        dialect = conn.dialect.name
+
+        def get_existing_columns(sync_conn):
+            from sqlalchemy import inspect
+            insp = inspect(sync_conn)
+            if not insp.has_table("game_sessions"):
+                return []
+            return [col["name"] for col in insp.get_columns("game_sessions")]
+
+        cols = await conn.run_sync(get_existing_columns)
+        if cols:
+            from sqlalchemy import text
+            bool_default = "FALSE" if dialect == "postgresql" else "0"
+            columns_to_add = [
+                ("max_hp", "INTEGER DEFAULT 100"),
+                ("max_focus", "INTEGER DEFAULT 50"),
+                ("turn_count", "INTEGER DEFAULT 0"),
+                ("is_game_over", f"BOOLEAN DEFAULT {bool_default}"),
+                ("game_over_reason", "VARCHAR(50)"),
+                ("game_over_summary", "TEXT"),
+            ]
+            for col_name, col_def in columns_to_add:
+                if col_name not in cols:
+                    await conn.execute(text(f"ALTER TABLE game_sessions ADD COLUMN {col_name} {col_def}"))
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:

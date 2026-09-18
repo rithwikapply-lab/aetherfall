@@ -355,10 +355,15 @@ class MockLLMClient(LLMClient):
         if is_combat:
             # Plausible damage range: -1 to -15
             damage = -((h % 15) + 1)
+            focus_cost = -((h % 5) + 1)
             moods = ["Bruised", "Defiant", "Exhausted", "Adrenaline-fueled", "Grim"]
             return response_model(
+                hp_delta=damage,
+                focus_delta=focus_cost,
+                hp_delta_reason="Physical injury sustained in combat with the enemy.",
+                focus_delta_reason="Mental fatigue from evasive maneuvers and aggressive strain.",
                 hp_change=damage,
-                focus_change=-((h % 5) + 1),
+                focus_change=focus_cost,
                 location=None,
                 mood=moods[h % len(moods)],
                 items_gained=[],
@@ -377,6 +382,10 @@ class MockLLMClient(LLMClient):
             ]
             chosen_item = item_pool[h % len(item_pool)]
             return response_model(
+                hp_delta=0,
+                focus_delta=0,
+                hp_delta_reason=None,
+                focus_delta_reason=None,
                 hp_change=0,
                 focus_change=0,
                 location=None,
@@ -398,6 +407,10 @@ class MockLLMClient(LLMClient):
             ]
             note = memory_templates[h % len(memory_templates)]
             return response_model(
+                hp_delta=0,
+                focus_delta=0,
+                hp_delta_reason=None,
+                focus_delta_reason=None,
                 hp_change=0,
                 focus_change=0,
                 location=None,
@@ -489,6 +502,10 @@ def _generate_mock_value(annotation, field_name: str, seed: str):
             return "The old lantern flickers against damp stone as the passage widens."
         if "fact" in name_lower:
             return f"Fact established: the northern portcullis is chained shut ({h % 100})."
+        if "delta_reason" in name_lower:
+            return "Resource consequence applied based on narrative hazards and strain."
+        if "summary" in name_lower or "epitaph" in name_lower:
+            return "The journey ended abruptly in the treacherous shadows of Aetherfall."
         if "explanation" in name_lower or "reason" in name_lower:
             return "Narrative action is coherent with established world state."
         return f"mock_{field_name}_{h % 1000}"

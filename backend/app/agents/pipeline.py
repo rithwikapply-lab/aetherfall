@@ -79,6 +79,11 @@ async def _execute_pipeline(
     if not game_session:
         raise ValueError(f"GameSession with id '{session_id}' not found.")
 
+    if game_session.is_game_over:
+        raise ValueError(
+            f"Cannot execute turn: GameSession '{session_id}' has already ended ({game_session.game_over_reason})."
+        )
+
     # 2. Determine parent StoryNode (supports branching via from_node_id)
     target_parent_id = from_node_id if from_node_id is not None else game_session.current_node_id
     parent_node: Optional[StoryNode] = None
@@ -132,6 +137,7 @@ async def _execute_pipeline(
         parent_node=parent_node,
         action_text=action_text,
         narration_text=narration_text,
+        llm_client=client,
     )
 
     # 6. Step 4: Run Continuity Guard (Tier-1 short-circuit -> Tier-2 LLM check)
@@ -155,6 +161,10 @@ async def _execute_pipeline(
         mood=game_session.mood,
         hp=game_session.hp,
         focus=game_session.focus,
+        turn_count=game_session.turn_count,
+        is_game_over=game_session.is_game_over,
+        game_over_reason=game_session.game_over_reason,
+        game_over_summary=game_session.game_over_summary,
         state_delta=state_delta,
         continuity=continuity_result,
         recalled_memory=recalled_schema,

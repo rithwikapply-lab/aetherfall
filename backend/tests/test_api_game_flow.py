@@ -396,3 +396,37 @@ async def test_story_graph_abandoned_branch_status(api_client: AsyncClient):
     assert node_map[node3_id]["status"] == "abandoned"
     assert node_map[node4_id]["status"] == "abandoned"
 
+
+@pytest.mark.asyncio
+async def test_api_action_rejected_on_game_over_session(api_client: AsyncClient):
+    """Verify API returns 400 when an action is submitted for an already-ended session."""
+    # 1. Create a session
+    create_res = await api_client.post("/api/sessions", json={"title": "Terminal API Campaign"})
+    assert create_res.status_code == 201
+    session_id = create_res.json()["id"]
+
+    # 2. Directly set session to game over in the DB
+    async with async_session_maker() as db:
+        session = await db.get(GameSession, session_id)
+        session.hp = 0
+        session.is_game_over = True
+        session.game_over_reason = "death"
+        session.game_over_summary = "Fell to mortal wounds."
+        await db.commit()
+
+    # 3. Verify GET /api/sessions/{id}/state exposes game_over details
+    state_res = await api_client.get(f"/api/sessions/{session_id}/state")
+    assert state_res.status_code == 200
+    state_data = state_res.json()
+    assert state_data["is_game_over"] is True
+    assert state_data["game_over_reason"] == "death"
+    assert state_data["game_over_summary"] == "Fell to mortal wounds."
+
+    # 4. Attempt action on the game over session -> expect HTTP 400 Bad Request
+    action_res = await api_client.post(
+        f"/api/sessions/{session_id}/action",
+        json={"action_text": "Crawl toward the ancient gate."},
+    )
+    assert action_res.status_code == 400
+    assert "already ended" in action_res.json()["detail"].lower()
+

@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from typing import List, Optional
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class HealthCheckResponse(BaseModel):
@@ -31,8 +31,12 @@ class StateDelta(BaseModel):
     Produced by the State Extraction Agent to update GameSession,
     StoryNode, InventoryItem, and NPC tables atomically.
     """
-    hp_change: int = Field(default=0, description="Damage taken or HP restored")
-    focus_change: int = Field(default=0, description="Focus expended or regained")
+    hp_delta: int = Field(default=0, description="Health points gained (+) or lost (-) as a result of narrative events")
+    focus_delta: int = Field(default=0, description="Focus points gained (+) or lost (-) as a result of narrative events")
+    hp_delta_reason: Optional[str] = Field(default=None, description="Concise reasoning for HP delta based on physical harm, hazards, aggression, or recovery")
+    focus_delta_reason: Optional[str] = Field(default=None, description="Concise reasoning for Focus delta based on mental effort, judgment, strain, or recovery")
+    hp_change: int = Field(default=0, description="Deprecated alias for hp_delta")
+    focus_change: int = Field(default=0, description="Deprecated alias for focus_delta")
     location: Optional[str] = Field(default=None, description="New location if player moved")
     mood: Optional[str] = Field(default=None, description="Current player mood/disposition")
     items_gained: List[ItemGain] = Field(default_factory=list, description="New items acquired")
@@ -45,6 +49,18 @@ class StateDelta(BaseModel):
         default_factory=list,
         description="New canonical world facts established this turn"
     )
+
+    @model_validator(mode="after")
+    def sync_deltas(self) -> "StateDelta":
+        if self.hp_delta != 0 and self.hp_change == 0:
+            self.hp_change = self.hp_delta
+        elif self.hp_change != 0 and self.hp_delta == 0:
+            self.hp_delta = self.hp_change
+        if self.focus_delta != 0 and self.focus_change == 0:
+            self.focus_change = self.focus_delta
+        elif self.focus_change != 0 and self.focus_delta == 0:
+            self.focus_delta = self.focus_change
+        return self
 
 
 class ContinuityResult(BaseModel):
@@ -77,6 +93,10 @@ class TurnResult(BaseModel):
     mood: str
     hp: int
     focus: int
+    turn_count: int = 0
+    is_game_over: bool = False
+    game_over_reason: Optional[str] = None
+    game_over_summary: Optional[str] = None
     state_delta: StateDelta
     continuity: ContinuityResult
     recalled_memory: Optional[RecalledMemory] = None
@@ -138,6 +158,10 @@ class SessionStateResponse(BaseModel):
     max_focus: int
     location: str
     mood: str
+    turn_count: int = 0
+    is_game_over: bool = False
+    game_over_reason: Optional[str] = None
+    game_over_summary: Optional[str] = None
     current_node_id: Optional[str] = None
     inventory: List[InventoryItemResponse] = Field(default_factory=list)
     quests: List[QuestResponse] = Field(default_factory=list)

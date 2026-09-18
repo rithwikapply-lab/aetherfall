@@ -21,6 +21,7 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import (
+    Boolean,
     DateTime,
     ForeignKey,
     Integer,
@@ -77,6 +78,12 @@ class GameSession(Base):
     max_focus: Mapped[int] = mapped_column(Integer, default=50)
     location: Mapped[str] = mapped_column(String(255), default="The Drowned Road")
     mood: Mapped[str] = mapped_column(String(100), default="Tense")
+    turn_count: Mapped[int] = mapped_column(Integer, default=0)
+
+    # Game-over state
+    is_game_over: Mapped[bool] = mapped_column(Boolean, default=False)
+    game_over_reason: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    game_over_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Relationships
     nodes: Mapped[list["StoryNode"]] = relationship(

@@ -52,6 +52,7 @@ export default function App() {
           session={session}
           onNavigateToGraph={handleNavigateToGraph}
           onNewCampaign={handleNewCampaign}
+          onStartCampaign={handleStartCampaign}
           pendingReplay={pendingReplay}
           onClearPendingReplay={handleClearPendingReplay}
         />

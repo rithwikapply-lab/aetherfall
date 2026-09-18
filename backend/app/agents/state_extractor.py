@@ -14,15 +14,27 @@ from app.llm_client import LLMClient, get_llm_client
 from app.models import GameSession, InventoryItem, NPC, NPCMemoryEntry, StoryNode
 from app.schemas import StateDelta
 
-STATE_EXTRACTOR_SYSTEM_PROMPT = """You are the World State Extraction Agent for Aetherfall.
+STATE_EXTRACTOR_SYSTEM_PROMPT = """You are the World State Extraction Agent for Aetherfall, a dark fantasy narrative RPG.
 Your job is to read the player's action and the resulting narrative prose, and extract precise, structured state changes.
-Follow these rules strictly:
-- hp_change: Negative if the player suffered physical harm or exhaustion, positive if healed or rested, 0 otherwise.
-- focus_change: Negative if magical or mental strain occurred, positive if focused or recovered, 0 otherwise.
+
+Follow these resource and reasoning instructions strictly:
+1. Resource Deltas & Reasoning:
+- hp_delta: Integer health point change resulting from physical events this turn (default 0).
+  * Harm & Hazards: Negative if the player suffered physical wounds, crushing trauma, burns, poison, or environmental hazards.
+  * Aggression & Recklessness: Overextending in melee, recklessly charging armed enemies without defense, or uncontrolled aggressive actions expose the player to retaliatory damage (negative).
+  * Recovery: Positive if the player explicitly rested in safety, bandaged wounds, or consumed restorative medicine.
+- hp_delta_reason: A concise sentence explaining the physical justification for hp_delta based on harm, aggression, hazards, or recovery. Set to null if hp_delta is 0.
+- focus_delta: Integer focus point change resulting from mental or magical exertion this turn (default 0).
+  * Mental Strain & Sorcery: Negative if the player channeled magic, deciphered ancient runes, maintained intense concentration, or endured psychological horror.
+  * Judgment & Tactics: Flawed, erratic, or panic-driven tactical judgment expends excess focus (negative).
+  * Recovery & Clarity: Positive if the player took a moment to steady their breathing, meditate, regain composure, or gain tactical clarity.
+- focus_delta_reason: A concise sentence explaining the mental/magical justification for focus_delta based on judgment, strain, or recovery. Set to null if focus_delta is 0.
+
+2. World State Mutations:
 - location: Set only if the narration explicitly moved the player to a distinctly new named area.
-- mood: A single evocative word capturing the player's emotional state (e.g. 'Wary', 'Relieved', 'Grim').
-- items_gained: List of concrete physical objects the player acquired or picked up.
-- items_lost: List of item names dropped, shattered, or consumed.
+- mood: A single evocative word capturing the player's emotional state (e.g. 'Wary', 'Relieved', 'Grim', 'Determined').
+- items_gained: List of concrete physical objects the player acquired or picked up (name and short description).
+- items_lost: List of item names dropped, shattered, consumed, or traded away.
 - npc_relationship_deltas: Record changes for any NPC interacted with, including an observation note from their viewpoint.
 - facts_established: Short, declarative world facts explicitly proven true this turn (e.g. 'the gate is barred with iron').
 """
@@ -57,6 +69,59 @@ async def extract_state_delta(
     )
 
 
+ATTRITION_HP = -1
+ATTRITION_FOCUS = -2
+
+
+async def generate_game_over_summary(
+    session: GameSession,
+    action_text: str,
+    narration_text: str,
+    llm_client: Optional[LLMClient] = None,
+) -> str:
+    """Generate a one-paragraph narrative epitaph for a fallen adventurer."""
+    client = llm_client or get_llm_client()
+    from app.llm_client import MockLLMClient
+
+    if isinstance(client, MockLLMClient):
+        if session.game_over_reason == "death":
+            return (
+                f"The journey ends in blood and shadow at {session.location}. Mortally wounded from physical "
+                f"perils, your lifeblood seeps into the dark earth, leaving your quest unfinished and your name lost to the mists."
+            )
+        else:
+            return (
+                f"Mind shattered and will broken, you collapse into delirium amidst the silence of {session.location}. "
+                f"Exhausted beyond endurance, you surrender to the encroaching dark, unable to carry on."
+            )
+
+    prompt = (
+        f"The player has suffered a game over ({session.game_over_reason.upper()}) in Aetherfall.\n"
+        f"Location: {session.location}\n"
+        f"Final Action: {action_text}\n"
+        f"Final Narration: {narration_text}\n\n"
+        f"Write a somber, atmospheric one-paragraph narrative epitaph (3-4 sentences) summarizing their tragic end."
+    )
+    try:
+        chunks = []
+        async for chunk in client.generate_stream(
+            prompt=prompt,
+            system_prompt="You are a somber dark fantasy chronicler composing an epitaph.",
+            max_tokens=200,
+            temperature=0.7,
+        ):
+            chunks.append(chunk)
+        summary = "".join(chunks).strip()
+        if summary:
+            return summary
+    except Exception:
+        pass
+
+    if session.game_over_reason == "death":
+        return f"Mortally wounded at {session.location}, the adventurer perished before fulfilling their quest."
+    return f"Overcome by mental and spiritual collapse at {session.location}, the wanderer succumbed to oblivion."
+
+
 async def apply_state_delta(
     db_session: AsyncSession,
     session: GameSession,
@@ -64,6 +129,7 @@ async def apply_state_delta(
     parent_node: Optional[StoryNode],
     action_text: str,
     narration_text: str,
+    llm_client: Optional[LLMClient] = None,
 ) -> StoryNode:
     """Create the new StoryNode and apply all delta updates to persistent database rows."""
     # 1. Determine turn number and create the new immutable StoryNode
@@ -83,15 +149,39 @@ async def apply_state_delta(
     await db_session.flush()
 
     # 2. Update denormalized GameSession state fields
-    if delta.hp_change != 0:
-        session.hp = max(0, min(session.max_hp, session.hp + delta.hp_change))
-    if delta.focus_change != 0:
-        session.focus = max(0, min(session.max_focus, session.focus + delta.focus_change))
+    # Apply extracted deltas + deterministic per-turn attrition (-1 HP, -2 Focus), clamped to [0, max]
+    extracted_hp = delta.hp_delta if delta.hp_delta != 0 else delta.hp_change
+    extracted_focus = delta.focus_delta if delta.focus_delta != 0 else delta.focus_change
+
+    session.hp = max(0, min(session.max_hp, session.hp + extracted_hp + ATTRITION_HP))
+    session.focus = max(0, min(session.max_focus, session.focus + extracted_focus + ATTRITION_FOCUS))
+
+    # Live Game-Over evaluation (HP takes priority if both hit 0 in the same turn)
+    if session.hp == 0:
+        session.is_game_over = True
+        session.game_over_reason = "death"
+        session.game_over_summary = await generate_game_over_summary(
+            session=session,
+            action_text=action_text,
+            narration_text=narration_text,
+            llm_client=llm_client,
+        )
+    elif session.focus == 0:
+        session.is_game_over = True
+        session.game_over_reason = "collapse"
+        session.game_over_summary = await generate_game_over_summary(
+            session=session,
+            action_text=action_text,
+            narration_text=narration_text,
+            llm_client=llm_client,
+        )
+
     if delta.location:
         session.location = delta.location
     if delta.mood:
         session.mood = delta.mood
 
+    session.turn_count = (session.turn_count or 0) + 1
     session.current_node_id = new_node.id
 
     # 3. Add gained inventory items

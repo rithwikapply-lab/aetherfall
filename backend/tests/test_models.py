@@ -155,3 +155,41 @@ async def test_data_model_lifecycle_and_eager_loading():
         assert len(loaded_root.children) == 1
         assert loaded_root.children[0].id == child_node_id
         assert loaded_root.facts == ["the bridge is out", "Kael is missing an eye"]
+
+
+@pytest.mark.asyncio
+async def test_game_session_game_over_and_turn_count_lifecycle():
+    await init_db()
+
+    async with async_session_maker() as session:
+        # Default initialization
+        gs = GameSession(title="Game Over Test Session")
+        session.add(gs)
+        await session.commit()
+        session_id = gs.id
+
+    async with async_session_maker() as session:
+        loaded = await session.get(GameSession, session_id)
+        assert loaded.max_hp == 100
+        assert loaded.max_focus == 50
+        assert loaded.hp == 100
+        assert loaded.focus == 50
+        assert loaded.turn_count == 0
+        assert loaded.is_game_over is False
+        assert loaded.game_over_reason is None
+        assert loaded.game_over_summary is None
+
+        # Transition to game-over state
+        loaded.is_game_over = True
+        loaded.game_over_reason = "death"
+        loaded.game_over_summary = "The traveler was dragged into the black river depths."
+        loaded.turn_count = 7
+        await session.commit()
+
+    async with async_session_maker() as session:
+        updated = await session.get(GameSession, session_id)
+        assert updated.is_game_over is True
+        assert updated.game_over_reason == "death"
+        assert updated.game_over_summary == "The traveler was dragged into the black river depths."
+        assert updated.turn_count == 7
+

@@ -166,6 +166,10 @@ async def get_session_state(session_id: str):
             max_focus=session.max_focus,
             location=session.location,
             mood=session.mood,
+            turn_count=session.turn_count,
+            is_game_over=session.is_game_over,
+            game_over_reason=session.game_over_reason,
+            game_over_summary=session.game_over_summary,
             current_node_id=session.current_node_id,
             inventory=[InventoryItemResponse.model_validate(item) for item in session.inventory],
             quests=[QuestResponse.model_validate(q) for q in session.quests],
@@ -302,6 +306,12 @@ async def execute_turn_action(session_id: str, request: ActionRequest):
                 detail=f"Session '{session_id}' not found.",
             )
 
+        if session.is_game_over:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot execute action: Session '{session_id}' has already ended ({session.game_over_reason}).",
+            )
+
         if request.from_node_id:
             target_node = await pre_check_db.get(StoryNode, request.from_node_id)
             if not target_node or target_node.session_id != session_id:
@@ -328,6 +338,13 @@ async def execute_turn_action(session_id: str, request: ActionRequest):
             )
             result = await db.execute(stmt)
             active_session = result.scalar_one()
+
+            if active_session.is_game_over:
+                yield ServerSentEvent(
+                    event="error",
+                    data=f"Session has already ended ({active_session.game_over_reason}).",
+                )
+                return
 
             # 2. Determine parent StoryNode (supports branching via from_node_id)
             target_parent_id = request.from_node_id if request.from_node_id is not None else active_session.current_node_id
@@ -385,6 +402,7 @@ async def execute_turn_action(session_id: str, request: ActionRequest):
                 parent_node=parent_node,
                 action_text=request.action_text,
                 narration_text=full_narration,
+                llm_client=llm_client,
             )
 
             # 6. Step 4: Continuity Guard
@@ -410,6 +428,10 @@ async def execute_turn_action(session_id: str, request: ActionRequest):
                 mood=active_session.mood,
                 hp=active_session.hp,
                 focus=active_session.focus,
+                turn_count=active_session.turn_count,
+                is_game_over=active_session.is_game_over,
+                game_over_reason=active_session.game_over_reason,
+                game_over_summary=active_session.game_over_summary,
                 state_delta=state_delta,
                 continuity=continuity_result,
                 recalled_memory=recalled_schema,
