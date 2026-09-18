@@ -153,6 +153,10 @@ class StoryNodeSummaryResponse(BaseModel):
     narration: str
     location: str
     created_at: Optional[datetime] = None
+    status: str = Field(
+        default="path",
+        description="Node role in tree: 'current', 'path', 'alternate', or 'abandoned'"
+    )
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -173,6 +177,10 @@ class StoryNodeDetailResponse(BaseModel):
     location: str
     facts: List[str] = Field(default_factory=list)
     created_at: Optional[datetime] = None
+    status: str = Field(
+        default="path",
+        description="Node role in tree: 'current', 'path', 'alternate', or 'abandoned'"
+    )
     model_config = ConfigDict(from_attributes=True)
 
 

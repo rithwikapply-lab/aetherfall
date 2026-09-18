@@ -173,13 +173,51 @@ async def get_session_state(session_id: str):
         )
 
 
+def compute_node_statuses(
+    nodes: List[StoryNode],
+    current_node_id: Optional[str],
+) -> dict[str, str]:
+    """Compute tree status for each node relative to the active current_node_id.
+
+    Statuses:
+    - 'current': The active leaf node (current_node_id).
+    - 'path': Ancestor nodes on the direct line from root to current_node_id.
+    - 'alternate': Fork points directly off the active path (alternative choices).
+    - 'abandoned': Deeper nodes on superseded inactive branches.
+    """
+    node_map = {n.id: n for n in nodes}
+    statuses: dict[str, str] = {}
+
+    # Trace active path from current_node_id up to root
+    active_path_ids = set()
+    curr = node_map.get(current_node_id) if current_node_id else None
+    if curr:
+        statuses[curr.id] = "current"
+        parent_id = curr.parent_id
+        while parent_id and parent_id in node_map:
+            active_path_ids.add(parent_id)
+            statuses[parent_id] = "path"
+            parent_id = node_map[parent_id].parent_id
+
+    # Classify remaining nodes
+    for n in nodes:
+        if n.id in statuses:
+            continue
+        if n.parent_id in active_path_ids or n.parent_id == current_node_id:
+            statuses[n.id] = "alternate"
+        else:
+            statuses[n.id] = "abandoned"
+
+    return statuses
+
+
 @router.get(
     "/{session_id}/graph",
     response_model=StoryGraphResponse,
     summary="Get the full branching story tree for a session",
 )
 async def get_story_graph(session_id: str):
-    """Retrieve all StoryNodes in a session to render the interactive tree on the frontend."""
+    """Retrieve all StoryNodes in a session with computed tree status for branch color-coding."""
     async with async_session_maker() as db:
         session = await db.get(GameSession, session_id)
         if not session:
@@ -196,10 +234,17 @@ async def get_story_graph(session_id: str):
         result = await db.execute(stmt)
         nodes = result.scalars().all()
 
+        statuses = compute_node_statuses(nodes, session.current_node_id)
+        node_summaries = []
+        for n in nodes:
+            summary = StoryNodeSummaryResponse.model_validate(n)
+            summary.status = statuses.get(n.id, "alternate")
+            node_summaries.append(summary)
+
         return StoryGraphResponse(
             session_id=session.id,
             current_node_id=session.current_node_id,
-            nodes=[StoryNodeSummaryResponse.model_validate(n) for n in nodes],
+            nodes=node_summaries,
         )
 
 
@@ -225,7 +270,15 @@ async def get_story_node_detail(session_id: str, node_id: str):
                 detail=f"StoryNode '{node_id}' not found in session '{session_id}'.",
             )
 
-        return StoryNodeDetailResponse.model_validate(node)
+        # Compute tree status relative to session current leaf
+        sess = await db.get(GameSession, session_id)
+        all_nodes_stmt = select(StoryNode).where(StoryNode.session_id == session_id)
+        all_nodes = (await db.execute(all_nodes_stmt)).scalars().all()
+        statuses = compute_node_statuses(all_nodes, sess.current_node_id if sess else None)
+
+        detail = StoryNodeDetailResponse.model_validate(node)
+        detail.status = statuses.get(node.id, "alternate")
+        return detail
 
 
 @router.post(

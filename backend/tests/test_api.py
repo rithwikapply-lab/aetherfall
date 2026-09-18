@@ -40,6 +40,7 @@ async def test_session_lifecycle_and_api_endpoints():
         root_node_id = graph["nodes"][0]["id"]
         assert graph["nodes"][0]["parent_id"] is None
         assert graph["nodes"][0]["turn_number"] == 0
+        assert graph["nodes"][0]["status"] == "current"
 
         # 4. Get detail for opening root node
         node_res = await client.get(f"/api/sessions/{session_id}/nodes/{root_node_id}")
