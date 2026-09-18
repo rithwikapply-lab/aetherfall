@@ -86,8 +86,8 @@ def test_gemini_client_interface():
         GeminiLLMClient(api_key="")
 
     # Instantiation with dummy key succeeds
-    dummy_client = GeminiLLMClient(api_key="dummy-gemini-test-key", model="gemini-2.5-flash")
-    assert dummy_client.model == "gemini-2.5-flash"
+    dummy_client = GeminiLLMClient(api_key="dummy-gemini-test-key", model="gemini-flash-lite-latest")
+    assert dummy_client.model == "gemini-flash-lite-latest"
     assert hasattr(dummy_client, "generate_stream")
     assert hasattr(dummy_client, "generate_structured")
 
@@ -125,15 +125,17 @@ async def test_gemini_client_streaming_mocked():
 
     gemini = GeminiLLMClient(api_key="dummy-gemini-key")
 
-    async def fake_stream(*args, **kwargs):
-        chunk1 = MagicMock()
-        chunk1.text = "The ancient archway looms."
-        chunk2 = MagicMock()
-        chunk2.text = " Mist gathers at your feet."
-        yield chunk1
-        yield chunk2
+    async def fake_stream_coro(*args, **kwargs):
+        async def fake_stream():
+            chunk1 = MagicMock()
+            chunk1.text = "The ancient archway looms."
+            chunk2 = MagicMock()
+            chunk2.text = " Mist gathers at your feet."
+            yield chunk1
+            yield chunk2
+        return fake_stream()
 
-    gemini._client.aio.models.generate_content_stream = fake_stream
+    gemini._client.aio.models.generate_content_stream = fake_stream_coro
 
     chunks = []
     async for chunk in gemini.generate_stream("Describe the entrance."):

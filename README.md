@@ -58,7 +58,7 @@ To run the containerized production-like stack:
 # Optional: Export an API key to enable live narrative generations.
 # Option 1: Google Gemini (Free tier available on Google AI Studio)
 export GOOGLE_API_KEY="your-gemini-api-key"
-export GEMINI_MODEL="gemini-2.5-flash"
+export GEMINI_MODEL="gemini-flash-lite-latest"
 
 # Option 2: Anthropic Claude (Takes precedence if both are set)
 # export ANTHROPIC_API_KEY="your-anthropic-api-key"

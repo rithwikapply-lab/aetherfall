@@ -169,13 +169,16 @@ class GeminiLLMClient(LLMClient):
         api_key: Optional[str] = None,
         model: Optional[str] = None,
     ):
-        self.api_key = api_key or settings.GOOGLE_API_KEY
+        if api_key is not None:
+            self.api_key = api_key
+        else:
+            self.api_key = settings.GOOGLE_API_KEY
         if not self.api_key:
             raise ValueError(
                 "GOOGLE_API_KEY is required to initialize GeminiLLMClient. "
                 "Use MockLLMClient for offline development or testing."
             )
-        self.model = model or settings.GEMINI_MODEL or "gemini-2.5-flash"
+        self.model = model or settings.GEMINI_MODEL or "gemini-flash-lite-latest"
         self._client = genai.Client(api_key=self.api_key)
 
     async def generate_stream(
@@ -191,7 +194,7 @@ class GeminiLLMClient(LLMClient):
             max_output_tokens=max_tokens,
             system_instruction=system_prompt if system_prompt else None,
         )
-        stream = self._client.aio.models.generate_content_stream(
+        stream = await self._client.aio.models.generate_content_stream(
             model=self.model,
             contents=prompt,
             config=config,

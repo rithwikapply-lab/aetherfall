@@ -39,7 +39,7 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       LLM_MODEL: ${LLM_MODEL:-claude-sonnet-4-5}
       GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-flash-lite-latest}
       ENVIRONMENT: production
       DEBUG: "false"
     depends_on:

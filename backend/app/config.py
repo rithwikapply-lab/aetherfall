@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     LLM_MODEL: str = "claude-sonnet-4-5"
 
     GOOGLE_API_KEY: Optional[str] = None
-    GEMINI_MODEL: str = "gemini-2.5-flash"
+    GEMINI_MODEL: str = "gemini-flash-lite-latest"
 
     model_config = SettingsConfigDict(
         env_file=".env",

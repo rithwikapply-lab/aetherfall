@@ -7,6 +7,16 @@ from app.main import app as fastapi_app
 
 
 @pytest.fixture(autouse=True)
+def isolate_llm_settings(monkeypatch):
+    """Ensure automated tests run offline with MockLLMClient by default,
+    isolating tests from any active API keys configured in .env.
+    """
+    from app.config import settings
+    monkeypatch.setattr(settings, "ANTHROPIC_API_KEY", None)
+    monkeypatch.setattr(settings, "GOOGLE_API_KEY", None)
+
+
+@pytest.fixture(autouse=True)
 async def isolate_database(tmp_path):
     """Provide a fresh, isolated SQLite database in tmp_path for every test.
 
