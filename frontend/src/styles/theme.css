@@ -1,0 +1,129 @@
+/* ==============================================================================
+   Aetherfall Dark Fantasy Theme System
+   ============================================================================== */
+
+:root {
+  /* Typography */
+  --font-serif: 'Spectral', Georgia, serif;
+  --font-sans: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
+
+  /* Color Palette: Dark Fantasy */
+  --bg-deep: #090b0e;
+  --bg-base: #0d1016;
+  --bg-surface: #141822;
+  --bg-surface-elevated: #1b212f;
+  --bg-surface-glass: rgba(20, 24, 34, 0.85);
+  --bg-card: rgba(23, 29, 41, 0.7);
+
+  /* Borders & Dividers */
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-medium: rgba(255, 255, 255, 0.14);
+  --border-gold: rgba(229, 184, 105, 0.4);
+  --border-teal: rgba(56, 178, 172, 0.4);
+
+  /* Primary Accent: Warm Gold */
+  --accent-gold: #e5b869;
+  --accent-gold-hover: #f3c978;
+  --accent-gold-faint: rgba(229, 184, 105, 0.12);
+  --accent-gold-glow: rgba(229, 184, 105, 0.35);
+
+  /* Secondary Accent: Muted Teal (Alternate branches & options) */
+  --accent-teal: #38b2ac;
+  --accent-teal-hover: #4fd1c5;
+  --accent-teal-faint: rgba(56, 178, 172, 0.12);
+  --accent-teal-glow: rgba(56, 178, 172, 0.3);
+
+  /* Status Colors for Story Graph Classification */
+  --status-current: #f59e0b; /* Bright golden amber */
+  --status-current-glow: 0 0 16px rgba(245, 158, 11, 0.45);
+  --status-path: #e5b869;    /* Warm gold */
+  --status-path-glow: 0 0 10px rgba(229, 184, 105, 0.25);
+  --status-alternate: #38b2ac; /* Muted Teal */
+  --status-alternate-glow: 0 0 8px rgba(56, 178, 172, 0.25);
+  --status-abandoned: #4a5568; /* Soft de-emphasized slate grey */
+
+  /* Combat & Vitals */
+  --stat-hp: #ef4444;
+  --stat-hp-bg: rgba(239, 68, 68, 0.18);
+  --stat-focus: #3b82f6;
+  --stat-focus-bg: rgba(59, 130, 246, 0.18);
+
+  /* Text Colors */
+  --text-primary: #f1f3f7;
+  --text-secondary: #9da6b9;
+  --text-muted: #647087;
+  --text-gold: #f3c978;
+  --text-teal: #4fd1c5;
+
+  /* Shadows */
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --shadow-gold: 0 0 20px rgba(229, 184, 105, 0.2);
+
+  /* Transitions */
+  --transition-fast: 0.15s ease;
+  --transition-normal: 0.25s ease;
+}
+
+/* Global Reset & Base */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--bg-deep);
+  color: var(--text-primary);
+  min-height: 100vh;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-deep);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--bg-surface-elevated);
+  border-radius: 4px;
+  border: 1px solid var(--border-subtle);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* Streaming Cursor Animation */
+@keyframes cursor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.streaming-cursor {
+  display: inline-block;
+  color: var(--accent-gold);
+  margin-left: 2px;
+  font-weight: 700;
+  animation: cursor-blink 0.8s infinite;
+}
+
+/* Pulse animation for active leaf node */
+@keyframes pulse-node {
+  0% {
+    box-shadow: 0 0 8px rgba(245, 158, 11, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(245, 158, 11, 0.85);
+  }
+  100% {
+    box-shadow: 0 0 8px rgba(245, 158, 11, 0.4);
+  }
+}

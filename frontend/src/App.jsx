@@ -1,35 +1,69 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import React, { useState } from 'react';
+import LandingScreen from './components/LandingScreen';
+import MainScreen from './components/MainScreen';
+import GraphScreen from './components/GraphScreen';
 
-function App() {
-  const [count, setCount] = useState(0)
+export default function App() {
+  // Simple local state router: "landing" | "main" | "graph"
+  const [view, setView] = useState('landing');
+  const [session, setSession] = useState(null);
+  const [pendingReplay, setPendingReplay] = useState(null);
+
+  const handleStartCampaign = (newSession) => {
+    setSession(newSession);
+    setPendingReplay(null);
+    setView('main');
+  };
+
+  const handleNewCampaign = () => {
+    setSession(null);
+    setPendingReplay(null);
+    setView('landing');
+  };
+
+  const handleNavigateToGraph = () => {
+    setView('graph');
+  };
+
+  const handleNavigateToMain = () => {
+    setView('main');
+  };
+
+  const handleReplayFromNode = ({ fromNodeId, actionText }) => {
+    setPendingReplay({
+      fromNodeId,
+      defaultActionText: actionText,
+    });
+    setView('main');
+  };
+
+  const handleClearPendingReplay = () => {
+    setPendingReplay(null);
+  };
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank" rel="noreferrer">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank" rel="noreferrer">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.jsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
-}
+    <div className="aetherfall-app">
+      {view === 'landing' && (
+        <LandingScreen onStartCampaign={handleStartCampaign} />
+      )}
 
-export default App
+      {view === 'main' && session && (
+        <MainScreen
+          session={session}
+          onNavigateToGraph={handleNavigateToGraph}
+          onNewCampaign={handleNewCampaign}
+          pendingReplay={pendingReplay}
+          onClearPendingReplay={handleClearPendingReplay}
+        />
+      )}
+
+      {view === 'graph' && session && (
+        <GraphScreen
+          session={session}
+          onNavigateToMain={handleNavigateToMain}
+          onReplayFromNode={handleReplayFromNode}
+        />
+      )}
+    </div>
+  );
+}
