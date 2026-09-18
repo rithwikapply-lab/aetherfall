@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.api.sessions import router as sessions_router
 from app.config import settings
 from app.database import init_db
 import app.models  # noqa: F401 - Register models with Base.metadata
@@ -18,9 +19,10 @@ app = FastAPI(
     title=settings.APP_NAME,
     description="Aetherfall AI Dungeon Master & Interactive Fiction Engine",
     version="0.1.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
+# Permissive CORS for local frontend development
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -29,13 +31,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Mount API routes
+app.include_router(sessions_router, prefix="/api")
+
 
 @app.get("/")
 async def root():
     return {
         "message": "Welcome to Aetherfall AI Dungeon Master Engine",
         "app": settings.APP_NAME,
-        "status": "online"
+        "status": "online",
     }
 
 
@@ -46,5 +51,5 @@ async def health_check():
         status="healthy",
         app=settings.APP_NAME,
         environment=settings.ENVIRONMENT,
-        database_configured=bool(settings.DATABASE_URL)
+        database_configured=bool(settings.DATABASE_URL),
     )

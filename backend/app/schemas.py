@@ -1,7 +1,8 @@
 """Pydantic schemas for Aetherfall request/response validation and agent outputs."""
 
+from datetime import datetime
 from typing import List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class HealthCheckResponse(BaseModel):
@@ -79,3 +80,102 @@ class TurnResult(BaseModel):
     state_delta: StateDelta
     continuity: ContinuityResult
     recalled_memory: Optional[RecalledMemory] = None
+
+
+# ==============================================================================
+# API REQUEST & RESPONSE SCHEMAS
+# Using ConfigDict(from_attributes=True) for seamless SQLAlchemy ORM serialization.
+# ==============================================================================
+
+class SessionCreateRequest(BaseModel):
+    title: Optional[str] = "The Sunken Reach"
+    chapter: Optional[str] = "Chapter 1: The Drowned Road"
+
+
+class SessionCreateResponse(BaseModel):
+    id: str
+    title: str
+    chapter: str
+    current_node_id: Optional[str] = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class InventoryItemResponse(BaseModel):
+    id: str
+    session_id: str
+    name: str
+    description: str
+    acquired_at_node_id: Optional[str] = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class QuestResponse(BaseModel):
+    id: str
+    session_id: str
+    title: str
+    status: str
+    description: str
+    updated_at_node_id: Optional[str] = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class NPCResponse(BaseModel):
+    id: str
+    name: str
+    description: str
+    relationship_score: int
+    relationship_label: str
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SessionStateResponse(BaseModel):
+    id: str
+    title: str
+    chapter: str
+    hp: int
+    max_hp: int
+    focus: int
+    max_focus: int
+    location: str
+    mood: str
+    current_node_id: Optional[str] = None
+    inventory: List[InventoryItemResponse] = Field(default_factory=list)
+    quests: List[QuestResponse] = Field(default_factory=list)
+    npcs: List[NPCResponse] = Field(default_factory=list)
+    model_config = ConfigDict(from_attributes=True)
+
+
+class StoryNodeSummaryResponse(BaseModel):
+    id: str
+    parent_id: Optional[str] = None
+    turn_number: int
+    player_action: Optional[str] = None
+    narration: str
+    location: str
+    created_at: Optional[datetime] = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class StoryGraphResponse(BaseModel):
+    session_id: str
+    current_node_id: Optional[str] = None
+    nodes: List[StoryNodeSummaryResponse] = Field(default_factory=list)
+    model_config = ConfigDict(from_attributes=True)
+
+
+class StoryNodeDetailResponse(BaseModel):
+    id: str
+    session_id: str
+    parent_id: Optional[str] = None
+    turn_number: int
+    player_action: Optional[str] = None
+    narration: str
+    location: str
+    facts: List[str] = Field(default_factory=list)
+    created_at: Optional[datetime] = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ActionRequest(BaseModel):
+    action_text: str
+    from_node_id: Optional[str] = None
