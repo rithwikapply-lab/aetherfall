@@ -1,0 +1,51 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: aetherfall-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: aetherfall
+      POSTGRES_PASSWORD: aetherfall_secret
+      POSTGRES_DB: aetherfall
+    expose:
+      - "5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aetherfall -d aetherfall"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  redis:
+    image: redis:7
+    container_name: aetherfall-redis
+    restart: unless-stopped
+    expose:
+      - "6379"
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: aetherfall-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://aetherfall:aetherfall_secret@postgres:5432/aetherfall
+      REDIS_URL: redis://redis:6379/0
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-claude-sonnet-4-5}
+      ENVIRONMENT: production
+      DEBUG: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+volumes:
+  postgres_data:
+    name: aetherfall-postgres-data
