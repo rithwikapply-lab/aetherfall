@@ -2,7 +2,9 @@ import json
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from app.database import async_session_maker
 from app.main import app
+from app.models import GameSession, StoryNode
 
 
 @pytest.fixture
@@ -259,3 +261,138 @@ async def test_action_with_invalid_from_node_id_returns_clean_404(api_client: As
     )
     assert res.status_code == 404
     assert "not found" in res.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_story_graph_abandoned_branch_status(api_client: AsyncClient):
+    """Verify deeper superseded branch nodes receive status='abandoned'.
+
+    Scenario:
+        root (turn 0) -> node1 (turn 1) -> node2 (turn 2) -> node3 (turn 3) -> node4 (turn 4)
+    with current_node_id pointing at node4.
+
+    Replay from node1 creates:
+        node1 -> fork_node (new current leaf)
+
+    Expected graph statuses:
+    - fork_node: 'current'
+    - root, node1: 'path' (ancestors of active leaf)
+    - node2: 'alternate' (direct child of active ancestor node1)
+    - node3, node4: 'abandoned' (deeper descendants of superseded branch)
+    """
+    async with async_session_maker() as session:
+        game_session = GameSession(
+            title="Abandoned Branch Campaign",
+            chapter="Chapter 1: The Descent",
+            hp=100,
+            max_hp=100,
+            focus=50,
+            max_focus=50,
+            location="The Ancient Crypts",
+            mood="Grim",
+        )
+        session.add(game_session)
+        await session.flush()
+
+        root_node = StoryNode(
+            session_id=game_session.id,
+            parent_id=None,
+            turn_number=0,
+            narration="Opening root node at the crossroads.",
+            facts=["the bridge is out"],
+        )
+        session.add(root_node)
+        await session.flush()
+
+        node1 = StoryNode(
+            session_id=game_session.id,
+            parent_id=root_node.id,
+            turn_number=1,
+            player_action="Action 1",
+            narration="Turn 1 narration",
+            facts=[],
+        )
+        session.add(node1)
+        await session.flush()
+
+        node2 = StoryNode(
+            session_id=game_session.id,
+            parent_id=node1.id,
+            turn_number=2,
+            player_action="Action 2",
+            narration="Turn 2 narration",
+            facts=[],
+        )
+        session.add(node2)
+        await session.flush()
+
+        node3 = StoryNode(
+            session_id=game_session.id,
+            parent_id=node2.id,
+            turn_number=3,
+            player_action="Action 3",
+            narration="Turn 3 narration",
+            facts=[],
+        )
+        session.add(node3)
+        await session.flush()
+
+        node4 = StoryNode(
+            session_id=game_session.id,
+            parent_id=node3.id,
+            turn_number=4,
+            player_action="Action 4",
+            narration="Turn 4 narration",
+            facts=[],
+        )
+        session.add(node4)
+        await session.flush()
+
+        # Point session at leaf node4
+        game_session.current_node_id = node4.id
+        await session.commit()
+
+        session_id = game_session.id
+        root_id = root_node.id
+        node1_id = node1.id
+        node2_id = node2.id
+        node3_id = node3.id
+        node4_id = node4.id
+
+    # Replay from node1 via API action endpoint
+    fork_res = await api_client.post(
+        f"/api/sessions/{session_id}/action",
+        json={
+            "action_text": "Search the western alcove instead.",
+            "from_node_id": node1_id,
+        },
+    )
+    assert fork_res.status_code == 200
+
+    fork_data = None
+    for line in fork_res.text.strip().split("\n"):
+        if line.startswith("data: ") and fork_data is None:
+            try:
+                fork_data = json.loads(line[6:])
+            except Exception:
+                pass
+    assert fork_data is not None
+    fork_node_id = fork_data["node_id"]
+    assert fork_data["parent_id"] == node1_id
+
+    # Query the story graph
+    graph_res = await api_client.get(f"/api/sessions/{session_id}/graph")
+    assert graph_res.status_code == 200
+    graph = graph_res.json()
+    assert len(graph["nodes"]) == 6
+
+    node_map = {n["id"]: n for n in graph["nodes"]}
+
+    # Specific status assertions:
+    assert node_map[fork_node_id]["status"] == "current"
+    assert node_map[root_id]["status"] == "path"
+    assert node_map[node1_id]["status"] == "path"
+    assert node_map[node2_id]["status"] == "alternate"
+    assert node_map[node3_id]["status"] == "abandoned"
+    assert node_map[node4_id]["status"] == "abandoned"
+
