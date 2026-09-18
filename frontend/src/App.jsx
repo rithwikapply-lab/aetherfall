@@ -3,9 +3,10 @@ import LandingScreen from './components/LandingScreen';
 import MainScreen from './components/MainScreen';
 import GraphScreen from './components/GraphScreen';
 import ChapterOverviewScreen from './components/ChapterOverviewScreen';
+import WorldMapScreen from './components/WorldMapScreen';
 
 export default function App() {
-  // Simple local state router: "landing" | "main" | "graph" | "chapters"
+  // Simple local state router: "landing" | "main" | "graph" | "chapters" | "map"
   const [view, setView] = useState('landing');
   const [session, setSession] = useState(null);
   const [pendingReplay, setPendingReplay] = useState(null);
@@ -65,6 +66,10 @@ export default function App() {
     setView('chapters');
   };
 
+  const handleNavigateToMap = () => {
+    setView('map');
+  };
+
   const handleNavigateToMain = () => {
     setView('main');
   };
@@ -96,6 +101,7 @@ export default function App() {
           session={session}
           onNavigateToGraph={handleNavigateToGraph}
           onNavigateToChapters={handleNavigateToChapters}
+          onNavigateToMap={handleNavigateToMap}
           onNewCampaign={handleNewCampaign}
           onStartCampaign={handleStartCampaign}
           pendingReplay={pendingReplay}
@@ -113,6 +119,13 @@ export default function App() {
 
       {view === 'chapters' && session && (
         <ChapterOverviewScreen
+          session={session}
+          onNavigateToMain={handleNavigateToMain}
+        />
+      )}
+
+      {view === 'map' && session && (
+        <WorldMapScreen
           session={session}
           onNavigateToMain={handleNavigateToMain}
         />

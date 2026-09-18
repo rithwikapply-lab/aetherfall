@@ -42,6 +42,8 @@ from app.schemas import (
     ActionRequest,
     ChapterResponse,
     InventoryItemResponse,
+    LocationEdge,
+    LocationNode,
     NPCResponse,
     QuestResponse,
     RecalledMemory,
@@ -52,6 +54,7 @@ from app.schemas import (
     StoryNodeDetailResponse,
     StoryNodeSummaryResponse,
     TurnResult,
+    WorldMapResponse,
 )
 from app.chapters import get_all_chapters, get_chapter, process_chapter_advancement
 
@@ -258,6 +261,162 @@ async def get_story_graph(session_id: str):
             session_id=session.id,
             current_node_id=session.current_node_id,
             nodes=node_summaries,
+        )
+
+
+@router.get(
+    "/{session_id}/map",
+    response_model=WorldMapResponse,
+    summary="Get the world map derived from the player's active travel path",
+)
+async def get_world_map(session_id: str):
+    """Build a world-map graph from the active StoryNode chain.
+
+    Visited nodes and travel edges are derived strictly from sequential location
+    changes along the active path (current_node_id → parent → … → root).
+    Mentioned-but-unvisited locations come from StoryNode.locations_mentioned.
+    No new DB tables are needed — everything is reconstructed at query time.
+    """
+    import re
+
+    def slug(name: str) -> str:
+        """Stable, URL-safe identifier derived from a location name."""
+        return re.sub(r"[^a-z0-9]+", "-", name.strip().lower()).strip("-")
+
+    async with async_session_maker() as db:
+        session = await db.get(GameSession, session_id)
+        if not session:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Session '{session_id}' not found.",
+            )
+
+        # Load all nodes for this session
+        stmt = (
+            select(StoryNode)
+            .where(StoryNode.session_id == session_id)
+            .order_by(StoryNode.turn_number.asc(), StoryNode.created_at.asc())
+        )
+        result = await db.execute(stmt)
+        all_nodes = result.scalars().all()
+
+        if not all_nodes:
+            return WorldMapResponse(
+                session_id=session_id,
+                current_location=session.location,
+                nodes=[],
+                edges=[],
+            )
+
+        # Build a node map for traversal
+        node_map = {n.id: n for n in all_nodes}
+
+        # Walk the ACTIVE PATH: current_node_id → parent_id → … → root
+        # This gives us only real travel transitions, not arbitrary node pairs.
+        active_path: list[StoryNode] = []
+        cursor_id = session.current_node_id
+        while cursor_id and cursor_id in node_map:
+            active_path.append(node_map[cursor_id])
+            cursor_id = node_map[cursor_id].parent_id
+        active_path.reverse()  # root → current leaf (chronological order)
+
+        # Track the chapter number active at each node.
+        # We reconstruct this from the session's chapter_number at each visited turn
+        # by correlating node turn_numbers with chapter progression data.
+        # Since we don't store per-turn chapter numbers in StoryNode, we use the
+        # session's current chapter as a best-effort ceiling and walk backwards:
+        # a simpler heuristic — assign chapter based on relative position among visited turns.
+        # For accuracy we track a running chapter by checking chapter completion quests.
+        # Simplest correct approach: store chapter at turn = session.chapter_number for
+        # latest nodes; for earlier nodes we step back using completed_chapters order.
+        completed_chapters = sorted(session.completed_chapters or [])
+        total_turns = active_path[-1].turn_number if active_path else 0
+
+        def chapter_at_turn(turn_number: int) -> int:
+            """Estimate which chapter was active when this turn was played.
+
+            Uses the proportion of completed turns vs total turns as a proxy
+            for chapter boundaries, yielding a monotonically non-decreasing
+            chapter number across the active path.
+            """
+            # The current chapter is the authoritative answer for recent turns.
+            # For older turns, we step back through completed chapters.
+            all_chapters_in_order = completed_chapters + [session.chapter_number]
+            if total_turns == 0 or len(all_chapters_in_order) == 1:
+                return all_chapters_in_order[0]
+            # Divide turn range evenly among known chapters (approximate)
+            chapter_count = len(all_chapters_in_order)
+            boundary = total_turns / chapter_count
+            idx = min(int(turn_number / boundary), chapter_count - 1)
+            return all_chapters_in_order[idx]
+
+        # Build visited locations in first-appearance order
+        visited_location_nodes: dict[str, LocationNode] = {}  # slug → LocationNode
+        ordered_visited_slugs: list[str] = []  # to reconstruct edge order
+
+        for node in active_path:
+            loc_name = node.location or ""
+            if not loc_name:
+                continue
+            loc_slug = slug(loc_name)
+            if loc_slug not in visited_location_nodes:
+                # First narration chars as description (strip leading whitespace)
+                desc = (node.narration or "").strip()[:120]
+                if len(node.narration or "") > 120:
+                    desc += "…"
+                visited_location_nodes[loc_slug] = LocationNode(
+                    id=loc_slug,
+                    name=loc_name,
+                    description=desc,
+                    chapter_number=chapter_at_turn(node.turn_number),
+                    visited_at_turn=node.turn_number,
+                    visited=True,
+                    is_current=(loc_name == session.location),
+                )
+                ordered_visited_slugs.append(loc_slug)
+
+        # Build travel edges: sequential transitions along the active path
+        edges: list[LocationEdge] = []
+        seen_edges: set[tuple[str, str]] = set()
+        prev_slug: Optional[str] = None
+        for node in active_path:
+            loc_name = node.location or ""
+            if not loc_name:
+                prev_slug = None
+                continue
+            loc_slug = slug(loc_name)
+            if prev_slug and prev_slug != loc_slug:
+                edge_key = (prev_slug, loc_slug)
+                if edge_key not in seen_edges:
+                    edges.append(LocationEdge(source_id=prev_slug, target_id=loc_slug))
+                    seen_edges.add(edge_key)
+            prev_slug = loc_slug
+
+        # Merge mentioned-but-unvisited locations from all active-path nodes
+        current_chapter = session.chapter_number
+        for node in active_path:
+            mentioned = node.locations_mentioned or []
+            for mentioned_name in mentioned:
+                mentioned_name = mentioned_name.strip()
+                if not mentioned_name:
+                    continue
+                m_slug = slug(mentioned_name)
+                if m_slug not in visited_location_nodes:
+                    visited_location_nodes[m_slug] = LocationNode(
+                        id=m_slug,
+                        name=mentioned_name,
+                        description="A place spoken of but not yet reached.",
+                        chapter_number=chapter_at_turn(node.turn_number),
+                        visited_at_turn=node.turn_number,
+                        visited=False,
+                        is_current=False,
+                    )
+
+        return WorldMapResponse(
+            session_id=session_id,
+            current_location=session.location,
+            nodes=list(visited_location_nodes.values()),
+            edges=edges,
         )
 
 

@@ -207,3 +207,17 @@ export async function getChapters() {
   }
   return res.json();
 }
+
+/**
+ * Fetch the world map derived from the player's active travel path.
+ * @param {string} sessionId
+ * @returns {Promise<{session_id: string, current_location: string, nodes: Array, edges: Array}>} WorldMapResponse
+ */
+export async function getWorldMap(sessionId) {
+  const res = await fetch(`${BASE_URL}/api/sessions/${sessionId}/map`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Failed to fetch world map (${res.status})`);
+  }
+  return res.json();
+}

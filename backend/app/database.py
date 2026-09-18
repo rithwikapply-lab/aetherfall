@@ -60,6 +60,23 @@ async def init_db() -> None:
                 if col_name not in cols:
                     await conn.execute(text(f"ALTER TABLE game_sessions ADD COLUMN {col_name} {col_def}"))
 
+        # Incremental migration check for story_nodes
+        def get_story_node_columns(sync_conn):
+            from sqlalchemy import inspect
+            insp = inspect(sync_conn)
+            if not insp.has_table("story_nodes"):
+                return []
+            return [col["name"] for col in insp.get_columns("story_nodes")]
+
+        story_cols = await conn.run_sync(get_story_node_columns)
+        if story_cols:
+            story_columns_to_add = [
+                ("locations_mentioned", "JSON DEFAULT '[]'"),
+            ]
+            for col_name, col_def in story_columns_to_add:
+                if col_name not in story_cols:
+                    await conn.execute(text(f"ALTER TABLE story_nodes ADD COLUMN {col_name} {col_def}"))
+
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """FastAPI dependency yielding an async database session."""

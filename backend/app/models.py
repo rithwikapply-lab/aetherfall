@@ -193,6 +193,11 @@ class StoryNode(Base):
         JSON,
         default=list
     )
+    locations_mentioned: Mapped[Optional[list[str]]] = mapped_column(
+        JSON,
+        nullable=True,
+        default=list
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now()

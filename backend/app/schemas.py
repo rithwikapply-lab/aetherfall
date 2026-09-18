@@ -53,6 +53,10 @@ class StateDelta(BaseModel):
         default_factory=list,
         description="New canonical world facts established this turn"
     )
+    locations_mentioned: List[str] = Field(
+        default_factory=list,
+        description="Names of distinct real places referenced in narration that the player has not yet physically entered this turn"
+    )
 
     @model_validator(mode="after")
     def sync_deltas(self) -> "StateDelta":
@@ -235,3 +239,32 @@ class StoryNodeDetailResponse(BaseModel):
 class ActionRequest(BaseModel):
     action_text: str
     from_node_id: Optional[str] = None
+
+
+# ==============================================================================
+# WORLD MAP API SCHEMAS
+# ==============================================================================
+
+class LocationNode(BaseModel):
+    """A place the player has visited or that has been mentioned in narration."""
+    id: str = Field(description="Slugified location name used as stable identifier")
+    name: str = Field(description="Display name of the location")
+    description: str = Field(description="Short excerpt from the narration at first arrival")
+    chapter_number: int = Field(description="Chapter active when this location was first reached/mentioned")
+    visited_at_turn: int = Field(description="Turn number when this location was first reached (visited) or mentioned")
+    visited: bool = Field(description="True if the player physically traveled here; False if only mentioned in narration")
+    is_current: bool = Field(default=False, description="True if this is the player's current location")
+
+
+class LocationEdge(BaseModel):
+    """A travel connection between two visited locations along the active story path."""
+    source_id: str = Field(description="Slugified name of the origin location")
+    target_id: str = Field(description="Slugified name of the destination location")
+
+
+class WorldMapResponse(BaseModel):
+    """Complete world-map data derived from the active story-node chain."""
+    session_id: str
+    current_location: str
+    nodes: List[LocationNode] = Field(default_factory=list)
+    edges: List[LocationEdge] = Field(default_factory=list)

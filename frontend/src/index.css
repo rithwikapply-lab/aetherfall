@@ -2940,3 +2940,232 @@
   cursor: pointer;
 }
 
+
+/* ============================================================================
+   WORLD MAP SCREEN — wm-* namespace
+   ============================================================================ */
+
+.wm-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  overflow: hidden;
+}
+
+.wm-navbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1.5rem;
+  background: var(--bg-glass);
+  border-bottom: 1px solid var(--border-subtle);
+  backdrop-filter: blur(12px);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.wm-nav-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.wm-legend {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.wm-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  font-family: 'Inter', sans-serif;
+  letter-spacing: 0.04em;
+}
+
+.wm-legend-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.wm-legend-mentioned {
+  background: transparent;
+  border: 2px dashed rgba(160,140,110,0.7);
+}
+
+.wm-reset-btn {
+  padding: 0.45rem 1rem;
+  background: rgba(201,168,76,0.15);
+  border: 1px solid rgba(201,168,76,0.4);
+  color: var(--accent-gold);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.82rem;
+  letter-spacing: 0.06em;
+  font-family: 'Inter', sans-serif;
+  transition: background 0.2s, border-color 0.2s;
+}
+.wm-reset-btn:hover {
+  background: rgba(201,168,76,0.28);
+  border-color: rgba(201,168,76,0.7);
+}
+
+.wm-canvas-wrapper {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+.wm-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Edges */
+.wm-edge {
+  stroke: rgba(255,255,255,0.2);
+  stroke-width: 1.8;
+  fill: none;
+}
+
+/* Nodes */
+.wm-node-label {
+  font-size: 11px;
+  font-family: 'Inter', sans-serif;
+  letter-spacing: 0.02em;
+}
+
+/* Current-location pulsing ring */
+.wm-current-pulse {
+  animation: wm-pulse 2.2s ease-in-out infinite;
+}
+
+@keyframes wm-pulse {
+  0%, 100% { opacity: 0.7; r: 40; }
+  50%       { opacity: 0.2; r: 48; }
+}
+
+/* Tooltip */
+.wm-tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: rgba(18, 16, 12, 0.92);
+  border: 1px solid rgba(201, 168, 76, 0.35);
+  border-radius: 8px;
+  padding: 0.65rem 0.9rem;
+  max-width: 260px;
+  z-index: 100;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  animation: fadeIn 0.12s ease;
+}
+
+.wm-tooltip-name {
+  font-family: 'Cinzel Decorative', 'Georgia', serif;
+  font-size: 0.9rem;
+  color: var(--accent-gold);
+  margin-bottom: 0.25rem;
+}
+
+.wm-tooltip-meta {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin-bottom: 0.35rem;
+}
+
+.wm-tooltip-desc {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  line-height: 1.45;
+  font-style: italic;
+}
+
+/* Empty state */
+.wm-empty-state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Loading overlay (reuses existing .graph-loading-overlay style) */
+.wm-loading-overlay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 0.75rem;
+  color: var(--text-secondary);
+}
+
+/* ── Map nav button in main navbar ── */
+.btn-map-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.9rem;
+  border: 1px solid rgba(74,184,160,0.35);
+  background: rgba(74,184,160,0.1);
+  color: #6dd4be;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.82rem;
+  letter-spacing: 0.05em;
+  transition: background 0.2s, border-color 0.2s;
+}
+.btn-map-nav:hover {
+  background: rgba(74,184,160,0.22);
+  border-color: rgba(74,184,160,0.6);
+}
+
+/* ── Minimap sidebar panel ── */
+.minimap-panel .panel-body {
+  padding: 0;
+}
+
+.minimap-body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 0.25rem 0.75rem;
+  min-height: 80px;
+}
+
+.minimap-svg {
+  display: block;
+  border-radius: 6px;
+}
+
+.minimap-expand-btn {
+  background: none;
+  border: none;
+  color: var(--accent-gold);
+  font-size: 0.75rem;
+  cursor: pointer;
+  letter-spacing: 0.05em;
+  padding: 0.1rem 0.4rem;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+.minimap-expand-btn:hover { opacity: 1; }
+
+.minimap-hint {
+  padding: 0.75rem 1rem;
+  text-align: center;
+}

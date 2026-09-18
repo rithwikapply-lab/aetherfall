@@ -38,6 +38,7 @@ Follow these resource and reasoning instructions strictly:
 - npc_relationship_deltas: Record changes for any NPC interacted with, including an observation note from their viewpoint.
 - quests_completed: List of active quest titles that were clearly fulfilled, resolved, or completed by events this turn.
 - facts_established: Short, declarative world facts explicitly proven true this turn (e.g. 'the gate is barred with iron').
+- locations_mentioned: Names of distinct, real places referenced by name in the narration that the player did NOT physically travel to this turn. Only include genuine named locations (e.g. 'The Bone Quay', 'Saltmere Bridge'), not vague references like 'the forest' or 'somewhere upstream'. Leave empty if no such locations were mentioned.
 """
 
 
@@ -190,6 +191,7 @@ async def apply_state_delta(
         narration=narration_text,
         location=new_location,
         facts=delta.facts_established or [],
+        locations_mentioned=delta.locations_mentioned or [],
     )
     db_session.add(new_node)
     await db_session.flush()

@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   createSession,
   getSessionState,
   getStoryNodeDetail,
+  getWorldMap,
   streamTurnAction,
 } from '../api/client';
 
@@ -10,6 +11,7 @@ export default function MainScreen({
   session,
   onNavigateToGraph,
   onNavigateToChapters,
+  onNavigateToMap,
   onNewCampaign,
   onStartCampaign,
   pendingReplay, // { fromNodeId, defaultActionText } if returning from Graph screen
@@ -31,6 +33,9 @@ export default function MainScreen({
 
   // Chapter advancement interstitial
   const [chapterTransition, setChapterTransition] = useState(null);
+
+  // Minimap state
+  const [minimapData, setMinimapData] = useState(null);
 
   const narrativeEndRef = useRef(null);
   const inputRef = useRef(null);
@@ -244,6 +249,14 @@ export default function MainScreen({
           } catch (e) {
             console.error('Failed to reload state after turn:', e);
           }
+
+          // Refresh minimap after each turn
+          try {
+            const mapData = await getWorldMap(session.id);
+            setMinimapData(mapData);
+          } catch (e) {
+            // Minimap is non-critical; swallow silently
+          }
         },
         onError: async (err) => {
           setIsStreaming(false);
@@ -343,6 +356,14 @@ export default function MainScreen({
             title="Open Chapter Progression Roadmap"
           >
             <span className="nav-icon">📜</span> Chapters
+          </button>
+          <button
+            type="button"
+            className="btn-map-nav"
+            onClick={onNavigateToMap}
+            title="Open World Map"
+          >
+            <span className="nav-icon">🗺</span> Map
           </button>
           <button
             type="button"
@@ -755,8 +776,122 @@ export default function MainScreen({
               )}
             </div>
           </section>
+
+          {/* World Minimap — non-interactive, click opens full Map screen */}
+          <section className="panel-card minimap-panel">
+            <header className="panel-header">
+              <h3>🗺 MINIMAP</h3>
+              <button
+                type="button"
+                className="minimap-expand-btn"
+                onClick={onNavigateToMap}
+                title="Open full World Map"
+              >
+                Expand ↗
+              </button>
+            </header>
+            <div
+              className="minimap-body"
+              onClick={onNavigateToMap}
+              title="Click to open full World Map"
+              style={{ cursor: 'pointer' }}
+            >
+              {minimapData && minimapData.nodes.length > 0 ? (
+                <MinimapSVG mapData={minimapData} />
+              ) : (
+                <p className="empty-panel-text minimap-hint">
+                  {minimapData ? 'No locations discovered yet.' : 'Play a turn to build the map.'}
+                </p>
+              )}
+            </div>
+          </section>
         </aside>
       </div>
     </div>
+  );
+}
+
+// ── Inline Minimap SVG ──────────────────────────────────────────────────────
+const CHAPTER_COLORS_MINI = {
+  1: '#c9a84c', 2: '#4ab8a0', 3: '#d9614c', 4: '#9b59b6',
+};
+
+function MinimapSVG({ mapData }) {
+  const W = 220;
+  const H = 130;
+  const R = 14;
+
+  const currentNode = mapData.nodes.find((n) => n.is_current);
+  if (!currentNode) return null;
+
+  // Show current + immediate neighbours only
+  const connectedIds = new Set();
+  mapData.edges.forEach((e) => {
+    if (e.source_id === currentNode.id) connectedIds.add(e.target_id);
+    if (e.target_id === currentNode.id) connectedIds.add(e.source_id);
+  });
+  const visibleNodes = mapData.nodes.filter(
+    (n) => n.id === currentNode.id || connectedIds.has(n.id)
+  ).slice(0, 5); // cap at 5 to avoid cramping
+
+  // Simple radial arrangement: current in center, neighbours around
+  const positions = {};
+  positions[currentNode.id] = { x: W / 2, y: H / 2 };
+  const neighbours = visibleNodes.filter((n) => n.id !== currentNode.id);
+  neighbours.forEach((n, i) => {
+    const angle = (2 * Math.PI * i) / (neighbours.length || 1) - Math.PI / 2;
+    positions[n.id] = {
+      x: W / 2 + 55 * Math.cos(angle),
+      y: H / 2 + 45 * Math.sin(angle),
+    };
+  });
+
+  const visibleEdges = mapData.edges.filter(
+    (e) => positions[e.source_id] && positions[e.target_id]
+  );
+
+  return (
+    <svg width={W} height={H} className="minimap-svg" aria-hidden="true">
+      {/* Edges */}
+      {visibleEdges.map((e) => {
+        const src = positions[e.source_id];
+        const tgt = positions[e.target_id];
+        return (
+          <line
+            key={`${e.source_id}-${e.target_id}`}
+            x1={src.x} y1={src.y} x2={tgt.x} y2={tgt.y}
+            stroke="rgba(255,255,255,0.18)" strokeWidth={1.5}
+          />
+        );
+      })}
+      {/* Nodes */}
+      {visibleNodes.map((n) => {
+        const pos = positions[n.id];
+        const color = CHAPTER_COLORS_MINI[n.chapter_number] || '#c9a84c';
+        const isCurr = n.id === currentNode.id;
+        return (
+          <g key={n.id} transform={`translate(${pos.x},${pos.y})`}>
+            {isCurr && <circle r={R + 5} fill="none" stroke={color} strokeWidth={1.5} opacity={0.5} />}
+            <circle
+              r={R}
+              fill={n.visited ? color : 'transparent'}
+              stroke={color}
+              strokeWidth={1.5}
+              strokeDasharray={n.visited ? 'none' : '4 3'}
+              opacity={n.visited ? 1 : 0.55}
+            />
+            <text
+              textAnchor="middle"
+              dy={R + 10}
+              fontSize="8"
+              fill="#b8a88a"
+              style={{ fontFamily: 'Inter, sans-serif', pointerEvents: 'none' }}
+            >
+              {n.name.length > 12 ? n.name.slice(0, 11) + '…' : n.name}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
   );
 }
