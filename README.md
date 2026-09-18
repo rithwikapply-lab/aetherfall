@@ -26,7 +26,7 @@ In Aetherfall, **world state is a database**:
 
 ## 2. Quickstart
 
-Aetherfall is designed to run **100% offline with zero external dependencies and zero API keys** using `MockLLMClient` and SQLite, while providing production-ready support for PostgreSQL, Redis, and live Anthropic Claude models.
+Aetherfall is designed to run **100% offline with zero external dependencies and zero API keys** using `MockLLMClient` and SQLite, while providing production-ready support for PostgreSQL, Redis, and live LLM generation with either Anthropic Claude or Google Gemini (via free Google AI Studio keys).
 
 ### Option A: Local Dev Mode (Zero Dependencies, Offline Mock Mode)
 
@@ -55,11 +55,16 @@ Open [http://localhost:5173](http://localhost:5173). You can immediately create 
 To run the containerized production-like stack:
 
 ```bash
-# Optional: Export Anthropic API key to enable live Claude 3.5 Sonnet generations.
-# If omitted or empty, the API automatically falls back to MockLLMClient.
-export ANTHROPIC_API_KEY="your-anthropic-api-key"
-export LLM_MODEL="claude-sonnet-4-5"
+# Optional: Export an API key to enable live narrative generations.
+# Option 1: Google Gemini (Free tier available on Google AI Studio)
+export GOOGLE_API_KEY="your-gemini-api-key"
+export GEMINI_MODEL="gemini-2.5-flash"
 
+# Option 2: Anthropic Claude (Takes precedence if both are set)
+# export ANTHROPIC_API_KEY="your-anthropic-api-key"
+# export LLM_MODEL="claude-sonnet-4-5"
+
+# If both are omitted or empty, the engine automatically defaults to MockLLMClient.
 docker compose up --build
 ```
 
@@ -161,12 +166,12 @@ This is a **deliberate architectural decision**, not a shortcut:
 
 ## 5. Automated Test Suite & Architecture Proofs
 
-The backend includes a comprehensive 34-test suite in [`backend/tests/`](file:///Users/rithwikdevireddy/backend/tests/) running via `pytest` and `pytest-asyncio`. Every test runs with **zero network calls and zero API keys** against `MockLLMClient` and ephemeral per-test SQLite databases.
+The backend includes a comprehensive 38-test suite in [`backend/tests/`](file:///Users/rithwikdevireddy/backend/tests/) running via `pytest` and `pytest-asyncio`. Every test runs with **zero network calls and zero API keys** against `MockLLMClient` and ephemeral per-test SQLite databases.
 
 ```bash
 cd backend
 .venv/bin/pytest -v
-============================== 34 passed in 0.78s ==============================
+============================== 38 passed in 0.98s ==============================
 ```
 
 ### Key Architectural Proofs
@@ -194,7 +199,7 @@ cd backend
 
 In the spirit of honest engineering documentation:
 
-1. **MockLLMClient Narration is Deterministic**: `MockLLMClient` generates templated, deterministic prose derived from action hashes and keywords. It proves that the async generators, SSE stream, and delta extraction work cleanly, but lacks the creative richness of a live model. Live, dynamic storytelling requires an `ANTHROPIC_API_KEY`.
+1. **MockLLMClient Narration is Deterministic**: `MockLLMClient` generates templated, deterministic prose derived from action hashes and keywords. It proves that the async generators, SSE stream, and delta extraction work cleanly, but lacks the creative richness of a live model. Live, dynamic storytelling requires an `ANTHROPIC_API_KEY` or `GOOGLE_API_KEY`.
 2. **Redis is Provisioned But Unwired**: Redis 7 is included in `docker-compose.yml` to demonstrate multi-container orchestration, but session caching and pub/sub message queuing have not yet been wired into the FastAPI backend (state currently resides directly in PostgreSQL/SQLite).
 3. **No Per-Turn AI Scene Art**: While location names and mood tags are tracked, dynamic image generation (e.g. Stable Diffusion or Imagen) for every turn is not implemented.
 4. **Story Graph Layout Scale**: The SVG tree layout positions nodes cleanly along the depth and branch axes for demo campaigns (tens of nodes). It is not optimized for massive trees with hundreds of concurrent branches, which would require a force-directed or virtualized layout engine.
@@ -210,3 +215,4 @@ In the spirit of honest engineering documentation:
 - **Two-Tier LLM Continuity Guard**: Built a cost- and latency-optimized verification agent that short-circuits LLM calls on opening turns; proved zero LLM invocation with an explosive mock in [`backend/tests/test_continuity_guard.py`](file:///Users/rithwikdevireddy/backend/tests/test_continuity_guard.py).
 - **Custom SSE-Over-POST Transport**: Hand-crafted a streaming Server-Sent Events parser over HTTP POST in [`frontend/src/api/client.js`](file:///Users/rithwikdevireddy/frontend/src/api/client.js) adhering to the W3C single-leading-space rule to stream narrative prose without corrupting whitespace.
 - **Explainable Lexical Memory Scoring**: Designed a pure-Python NPC memory retrieval system combining tokenized Jaccard overlap, salience normalization, and recency decay; thoroughly verified without external vector database dependencies in [`backend/tests/test_npc_memory.py`](file:///Users/rithwikdevireddy/backend/tests/test_npc_memory.py).
+- **Multi-Provider LLM Client Abstraction**: Encapsulated streaming text and native schema-enforced structured generation behind an abstract `LLMClient` interface with automatic runtime fallback (Anthropic $\to$ Gemini $\to$ Mock), tested without live API credits in [`backend/tests/test_llm_client.py`](file:///Users/rithwikdevireddy/backend/tests/test_llm_client.py).

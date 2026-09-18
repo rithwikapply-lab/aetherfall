@@ -3,6 +3,7 @@ from pydantic import BaseModel
 
 from app.llm_client import (
     AnthropicLLMClient,
+    GeminiLLMClient,
     LLMClient,
     MockLLMClient,
     get_llm_client,
@@ -74,6 +75,98 @@ def test_anthropic_client_interface():
     assert dummy_client.model == "claude-sonnet-4-5"
     assert hasattr(dummy_client, "generate_stream")
     assert hasattr(dummy_client, "generate_structured")
+
+
+def test_gemini_client_interface():
+    # Confirm GeminiLLMClient conforms to abstract interface without spending credits
+    assert issubclass(GeminiLLMClient, LLMClient)
+
+    # Error handling when no API key provided
+    with pytest.raises(ValueError, match="GOOGLE_API_KEY is required"):
+        GeminiLLMClient(api_key="")
+
+    # Instantiation with dummy key succeeds
+    dummy_client = GeminiLLMClient(api_key="dummy-gemini-test-key", model="gemini-2.5-flash")
+    assert dummy_client.model == "gemini-2.5-flash"
+    assert hasattr(dummy_client, "generate_stream")
+    assert hasattr(dummy_client, "generate_structured")
+
+
+def test_get_llm_client_provider_precedence(monkeypatch):
+    from app.config import settings
+
+    # Case 1: Neither key configured -> MockLLMClient
+    monkeypatch.setattr(settings, "ANTHROPIC_API_KEY", None)
+    monkeypatch.setattr(settings, "GOOGLE_API_KEY", None)
+    client = get_llm_client()
+    assert isinstance(client, MockLLMClient)
+
+    # Case 2: Only GOOGLE_API_KEY configured -> GeminiLLMClient
+    monkeypatch.setattr(settings, "ANTHROPIC_API_KEY", None)
+    monkeypatch.setattr(settings, "GOOGLE_API_KEY", "dummy-gemini-key")
+    client = get_llm_client()
+    assert isinstance(client, GeminiLLMClient)
+    assert isinstance(client, LLMClient)
+
+    # Case 3: Both configured -> Anthropic takes precedence
+    monkeypatch.setattr(settings, "ANTHROPIC_API_KEY", "dummy-anthropic-key")
+    monkeypatch.setattr(settings, "GOOGLE_API_KEY", "dummy-gemini-key")
+    client = get_llm_client()
+    assert isinstance(client, AnthropicLLMClient)
+
+    # Case 4: force_mock=True always returns MockLLMClient
+    client_forced = get_llm_client(force_mock=True)
+    assert isinstance(client_forced, MockLLMClient)
+
+
+@pytest.mark.asyncio
+async def test_gemini_client_streaming_mocked():
+    from unittest.mock import MagicMock
+
+    gemini = GeminiLLMClient(api_key="dummy-gemini-key")
+
+    async def fake_stream(*args, **kwargs):
+        chunk1 = MagicMock()
+        chunk1.text = "The ancient archway looms."
+        chunk2 = MagicMock()
+        chunk2.text = " Mist gathers at your feet."
+        yield chunk1
+        yield chunk2
+
+    gemini._client.aio.models.generate_content_stream = fake_stream
+
+    chunks = []
+    async for chunk in gemini.generate_stream("Describe the entrance."):
+        chunks.append(chunk)
+
+    assert "".join(chunks) == "The ancient archway looms. Mist gathers at your feet."
+
+
+@pytest.mark.asyncio
+async def test_gemini_client_structured_output_mocked():
+    from unittest.mock import AsyncMock, MagicMock
+
+    gemini = GeminiLLMClient(api_key="dummy-gemini-key")
+
+    mock_resp = MagicMock()
+    mock_resp.parsed = SampleWorldStateDelta(
+        hp_change=-5,
+        mood="Wary",
+        discovered_facts=["The crypt is damp."],
+        continuity_valid=True,
+    )
+    mock_resp.text = None
+
+    gemini._client.aio.models.generate_content = AsyncMock(return_value=mock_resp)
+
+    res = await gemini.generate_structured(
+        prompt="Analyze turn outcome.",
+        response_model=SampleWorldStateDelta,
+    )
+    assert isinstance(res, SampleWorldStateDelta)
+    assert res.hp_change == -5
+    assert res.mood == "Wary"
+    assert res.continuity_valid is True
 
 
 @pytest.mark.asyncio

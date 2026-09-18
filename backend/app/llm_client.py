@@ -36,6 +36,8 @@ from typing import (
 from enum import Enum
 
 from anthropic import AsyncAnthropic
+from google import genai
+from google.genai import types as genai_types
 from pydantic import BaseModel
 from pydantic_core import PydanticUndefined
 
@@ -156,6 +158,85 @@ class AnthropicLLMClient(LLMClient):
         raise ValueError(
             f"Anthropic model did not call requested tool '{tool_name}'. "
             f"Blocks returned: {response.content}"
+        )
+
+
+class GeminiLLMClient(LLMClient):
+    """Production LLM client utilizing Google's Gemini API via the google-genai SDK."""
+
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        model: Optional[str] = None,
+    ):
+        self.api_key = api_key or settings.GOOGLE_API_KEY
+        if not self.api_key:
+            raise ValueError(
+                "GOOGLE_API_KEY is required to initialize GeminiLLMClient. "
+                "Use MockLLMClient for offline development or testing."
+            )
+        self.model = model or settings.GEMINI_MODEL or "gemini-2.5-flash"
+        self._client = genai.Client(api_key=self.api_key)
+
+    async def generate_stream(
+        self,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        max_tokens: int = 1000,
+        temperature: float = 0.7,
+    ) -> AsyncGenerator[str, None]:
+        """Stream narrative text deltas from Gemini using generate_content_stream."""
+        config = genai_types.GenerateContentConfig(
+            temperature=temperature,
+            max_output_tokens=max_tokens,
+            system_instruction=system_prompt if system_prompt else None,
+        )
+        stream = self._client.aio.models.generate_content_stream(
+            model=self.model,
+            contents=prompt,
+            config=config,
+        )
+        async for chunk in stream:
+            if chunk.text:
+                yield chunk.text
+
+    async def generate_structured(
+        self,
+        prompt: str,
+        response_model: Type[T],
+        system_prompt: Optional[str] = None,
+        max_tokens: int = 1000,
+        temperature: float = 0.2,
+    ) -> T:
+        """Force Gemini to return structured output matching response_model using response_schema."""
+        config = genai_types.GenerateContentConfig(
+            temperature=temperature,
+            max_output_tokens=max_tokens,
+            system_instruction=system_prompt if system_prompt else None,
+            response_mime_type="application/json",
+            response_schema=response_model,
+        )
+
+        response = await self._client.aio.models.generate_content(
+            model=self.model,
+            contents=prompt,
+            config=config,
+        )
+
+        if hasattr(response, "parsed") and response.parsed is not None:
+            if isinstance(response.parsed, response_model):
+                return response.parsed
+            if isinstance(response.parsed, BaseModel):
+                return response_model.model_validate(response.parsed.model_dump())
+            if isinstance(response.parsed, dict):
+                return response_model.model_validate(response.parsed)
+
+        if getattr(response, "text", None):
+            return response_model.model_validate_json(response.text)
+
+        raise ValueError(
+            f"Gemini model did not return valid structured output for {response_model.__name__}. "
+            f"Response: {response}"
         )
 
 
@@ -428,10 +509,14 @@ def _generate_mock_model(model_cls: Type[T], seed: str) -> T:
 def get_llm_client(force_mock: bool = False) -> LLMClient:
     """Factory returning the appropriate LLMClient implementation.
 
-    Automatically uses `AnthropicLLMClient` when ANTHROPIC_API_KEY is configured
-    in environment/settings. Otherwise returns `MockLLMClient` for seamless,
-    zero-dependency local testing and development.
+    Automatically uses:
+    1. `AnthropicLLMClient` if ANTHROPIC_API_KEY is configured.
+    2. `GeminiLLMClient` if GOOGLE_API_KEY is configured.
+    3. `MockLLMClient` otherwise for seamless, zero-dependency local testing and development.
     """
-    if not force_mock and settings.ANTHROPIC_API_KEY and settings.ANTHROPIC_API_KEY.strip():
-        return AnthropicLLMClient()
+    if not force_mock:
+        if settings.ANTHROPIC_API_KEY and settings.ANTHROPIC_API_KEY.strip():
+            return AnthropicLLMClient()
+        if settings.GOOGLE_API_KEY and settings.GOOGLE_API_KEY.strip():
+            return GeminiLLMClient()
     return MockLLMClient()
