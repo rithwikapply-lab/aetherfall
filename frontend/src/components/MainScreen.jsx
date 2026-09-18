@@ -108,16 +108,44 @@ export default function MainScreen({
     };
   }, [session?.id]);
 
-  // Check if we came from Graph screen with a pending replay fork
+  // Check if we came with a pending action or from Graph screen with a replay fork
   useEffect(() => {
-    if (pendingReplay?.fromNodeId) {
-      setActiveReplayNodeId(pendingReplay.fromNodeId);
+    if (pendingReplay) {
+      if (pendingReplay.fromNodeId) {
+        setActiveReplayNodeId(pendingReplay.fromNodeId);
+      }
       if (pendingReplay.defaultActionText) {
         setActionInput(pendingReplay.defaultActionText);
       }
       onClearPendingReplay?.();
     }
   }, [pendingReplay, onClearPendingReplay]);
+
+  // Persist latest active session state to localStorage for landing resume
+  useEffect(() => {
+    if (sessionState?.id) {
+      try {
+        localStorage.setItem(
+          'aetherfall_last_session',
+          JSON.stringify({
+            id: sessionState.id,
+            title: sessionState.title,
+            chapter: sessionState.chapter,
+            chapter_number: sessionState.chapter_number,
+            location: sessionState.location,
+            turn_count: sessionState.turn_count || 0,
+            hp: sessionState.hp,
+            max_hp: sessionState.max_hp,
+            focus: sessionState.focus,
+            max_focus: sessionState.max_focus,
+            is_game_over: sessionState.is_game_over,
+          })
+        );
+      } catch (e) {
+        console.warn('Unable to persist session to localStorage:', e);
+      }
+    }
+  }, [sessionState]);
 
   // Execute player action via SSE streaming
   const handleActionSubmit = async (e) => {

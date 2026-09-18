@@ -9,14 +9,49 @@ export default function App() {
   const [view, setView] = useState('landing');
   const [session, setSession] = useState(null);
   const [pendingReplay, setPendingReplay] = useState(null);
+  const [lastSession, setLastSession] = useState(() => {
+    try {
+      const saved = localStorage.getItem('aetherfall_last_session');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
 
-  const handleStartCampaign = (newSession) => {
+  const handleStartCampaign = (newSession, initialAction = null) => {
     setSession(newSession);
-    setPendingReplay(null);
+    setLastSession(newSession);
+    try {
+      localStorage.setItem('aetherfall_last_session', JSON.stringify(newSession));
+    } catch (e) {
+      console.warn('Unable to save session to localStorage:', e);
+    }
+    if (initialAction) {
+      setPendingReplay({
+        fromNodeId: null,
+        defaultActionText: initialAction,
+      });
+    } else {
+      setPendingReplay(null);
+    }
+    setView('main');
+  };
+
+  const handleResumeCampaign = (sessionToResume, initialAction = null) => {
+    setSession(sessionToResume);
+    if (initialAction) {
+      setPendingReplay({
+        fromNodeId: null,
+        defaultActionText: initialAction,
+      });
+    } else {
+      setPendingReplay(null);
+    }
     setView('main');
   };
 
   const handleNewCampaign = () => {
+    // Keep lastSession in localStorage so player can still resume if desired
     setSession(null);
     setPendingReplay(null);
     setView('landing');
@@ -49,7 +84,11 @@ export default function App() {
   return (
     <div className="aetherfall-app">
       {view === 'landing' && (
-        <LandingScreen onStartCampaign={handleStartCampaign} />
+        <LandingScreen
+          onStartCampaign={handleStartCampaign}
+          onResumeCampaign={handleResumeCampaign}
+          existingSession={session || lastSession}
+        />
       )}
 
       {view === 'main' && session && (
