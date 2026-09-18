@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.llm_client import LLMClient, get_llm_client
-from app.models import GameSession, InventoryItem, NPC, NPCMemoryEntry, StoryNode
+from app.models import GameSession, InventoryItem, NPC, NPCMemoryEntry, Quest, StoryNode
 from app.schemas import StateDelta
 
 STATE_EXTRACTOR_SYSTEM_PROMPT = """You are the World State Extraction Agent for Aetherfall, a dark fantasy narrative RPG.
@@ -36,6 +36,7 @@ Follow these resource and reasoning instructions strictly:
 - items_gained: List of concrete physical objects the player acquired or picked up (name and short description).
 - items_lost: List of item names dropped, shattered, consumed, or traded away.
 - npc_relationship_deltas: Record changes for any NPC interacted with, including an observation note from their viewpoint.
+- quests_completed: List of active quest titles that were clearly fulfilled, resolved, or completed by events this turn.
 - facts_established: Short, declarative world facts explicitly proven true this turn (e.g. 'the gate is barred with iron').
 """
 
@@ -120,6 +121,51 @@ async def generate_game_over_summary(
     if session.game_over_reason == "death":
         return f"Mortally wounded at {session.location}, the adventurer perished before fulfilling their quest."
     return f"Overcome by mental and spiritual collapse at {session.location}, the wanderer succumbed to oblivion."
+
+
+async def generate_victory_summary(
+    session: GameSession,
+    action_text: str,
+    narration_text: str,
+    llm_client: Optional[LLMClient] = None,
+) -> str:
+    """Generate an inspiring, triumphant one-paragraph narrative chronicle for saving the realm."""
+    client = llm_client or get_llm_client()
+    from app.llm_client import MockLLMClient
+
+    if isinstance(client, MockLLMClient):
+        return (
+            f"Against all odds, the floodwaters recede from {session.location}. The ancient curse has broken, "
+            f"and the Sunken Reach is saved. Songs of your triumph will echo through the halls for generations to come."
+        )
+
+    prompt = (
+        f"The player has achieved VICTORY in Aetherfall by completing Chapter 4: The Reach's End!\n"
+        f"Location: {session.location}\n"
+        f"Final Action: {action_text}\n"
+        f"Final Narration: {narration_text}\n\n"
+        f"Write an inspiring, triumphant one-paragraph narrative chronicle (3-4 sentences) celebrating their victory, "
+        f"the ending of the deluge, and their enduring heroic legacy across the realm."
+    )
+    try:
+        chunks = []
+        async for chunk in client.generate_stream(
+            prompt=prompt,
+            system_prompt="You are an inspiring chronicler of epic fantasy legends recording a momentous heroic victory.",
+            max_tokens=200,
+            temperature=0.7,
+        ):
+            chunks.append(chunk)
+        summary = "".join(chunks).strip()
+        if summary:
+            return summary
+    except Exception:
+        pass
+
+    return (
+        f"Against all odds, the deluge receded and the source of the flood was vanquished at {session.location}. "
+        f"The realm of Aetherfall stands saved."
+    )
 
 
 async def apply_state_delta(
@@ -247,5 +293,20 @@ async def apply_state_delta(
                 salience=salience,
             )
             db_session.add(memory)
+
+    # 6. Apply quest completions
+    if delta.quests_completed:
+        stmt = (
+            select(Quest)
+            .where(Quest.session_id == session.id)
+            .where(Quest.status == "active")
+        )
+        result = await db_session.execute(stmt)
+        active_quests = result.scalars().all()
+        completed_titles = {t.strip().lower() for t in delta.quests_completed}
+        for quest in active_quests:
+            if quest.title.strip().lower() in completed_titles:
+                quest.status = "completed"
+                quest.updated_at_node_id = new_node.id
 
     return new_node

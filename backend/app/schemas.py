@@ -45,6 +45,10 @@ class StateDelta(BaseModel):
         default_factory=list,
         description="NPC sentiment and memory changes"
     )
+    quests_completed: List[str] = Field(
+        default_factory=list,
+        description="Titles of active quests completed or resolved this turn"
+    )
     facts_established: List[str] = Field(
         default_factory=list,
         description="New canonical world facts established this turn"
@@ -94,6 +98,11 @@ class TurnResult(BaseModel):
     hp: int
     focus: int
     turn_count: int = 0
+    chapter_number: int = 1
+    chapter: str = "Chapter 1: The Drowned Road"
+    completed_chapters: List[int] = Field(default_factory=list)
+    chapter_advanced: bool = False
+    chapter_objective: Optional[str] = None
     is_game_over: bool = False
     game_over_reason: Optional[str] = None
     game_over_summary: Optional[str] = None
@@ -107,6 +116,16 @@ class TurnResult(BaseModel):
 # Using ConfigDict(from_attributes=True) for seamless SQLAlchemy ORM serialization.
 # ==============================================================================
 
+class ChapterResponse(BaseModel):
+    """Static metadata and objectives for a campaign chapter."""
+    number: int
+    title: str
+    objective: str
+    completion_quest_title: str
+    completion_quest_description: str
+    next_chapter_number: Optional[int] = None
+
+
 class SessionCreateRequest(BaseModel):
     title: Optional[str] = "The Sunken Reach"
     chapter: Optional[str] = "Chapter 1: The Drowned Road"
@@ -116,6 +135,8 @@ class SessionCreateResponse(BaseModel):
     id: str
     title: str
     chapter: str
+    chapter_number: int = 1
+    completed_chapters: List[int] = Field(default_factory=list)
     current_node_id: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
@@ -152,6 +173,9 @@ class SessionStateResponse(BaseModel):
     id: str
     title: str
     chapter: str
+    chapter_number: int = 1
+    completed_chapters: List[int] = Field(default_factory=list)
+    chapter_objective: Optional[str] = None
     hp: int
     max_hp: int
     focus: int

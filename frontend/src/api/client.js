@@ -195,3 +195,15 @@ export async function streamTurnAction(sessionId, {
     throw err;
   }
 }
+
+/**
+ * Fetch all four canonical chapter definitions and objectives.
+ * @returns {Promise<Array<{number: number, title: string, objective: string, completion_quest_title: string, next_chapter_number: number|null}>>}
+ */
+export async function getChapters() {
+  const res = await fetch(`${BASE_URL}/api/chapters`);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch chapters (${res.status})`);
+  }
+  return res.json();
+}

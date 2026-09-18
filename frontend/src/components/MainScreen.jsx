@@ -9,6 +9,7 @@ import {
 export default function MainScreen({
   session,
   onNavigateToGraph,
+  onNavigateToChapters,
   onNewCampaign,
   onStartCampaign,
   pendingReplay, // { fromNodeId, defaultActionText } if returning from Graph screen
@@ -28,6 +29,9 @@ export default function MainScreen({
   const [hpIndicator, setHpIndicator] = useState(null);
   const [focusIndicator, setFocusIndicator] = useState(null);
 
+  // Chapter advancement interstitial
+  const [chapterTransition, setChapterTransition] = useState(null);
+
   const narrativeEndRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -43,15 +47,28 @@ export default function MainScreen({
   // Floating indicators auto-fade
   useEffect(() => {
     if (!hpIndicator) return;
-    const timer = setTimeout(() => setHpIndicator(null), 4500);
+    const timer = setTimeout(() => {
+      setHpIndicator(null);
+    }, 4500);
     return () => clearTimeout(timer);
   }, [hpIndicator]);
 
   useEffect(() => {
     if (!focusIndicator) return;
-    const timer = setTimeout(() => setFocusIndicator(null), 4500);
+    const timer = setTimeout(() => {
+      setFocusIndicator(null);
+    }, 4500);
     return () => clearTimeout(timer);
   }, [focusIndicator]);
+
+  // Chapter transition interstitial auto-advance after 7 seconds
+  useEffect(() => {
+    if (!chapterTransition) return;
+    const timer = setTimeout(() => {
+      setChapterTransition(null);
+    }, 7000);
+    return () => clearTimeout(timer);
+  }, [chapterTransition]);
 
   // Initial load: Fetch state and root opening StoryNode
   useEffect(() => {
@@ -166,6 +183,15 @@ export default function MainScreen({
             },
           ]);
 
+          // Chapter transition detection
+          if (turnResult.chapter_advanced) {
+            setChapterTransition({
+              chapterNumber: turnResult.chapter_number,
+              title: turnResult.chapter,
+              objective: turnResult.chapter_objective || 'Pursue the next phase of the campaign.',
+            });
+          }
+
           // Immediate local update if game over
           if (turnResult.is_game_over) {
             setSessionState((prev) => ({
@@ -174,6 +200,9 @@ export default function MainScreen({
               hp: turnResult.hp,
               focus: turnResult.focus,
               turn_count: turnResult.turn_count,
+              chapter_number: turnResult.chapter_number,
+              chapter: turnResult.chapter,
+              completed_chapters: turnResult.completed_chapters,
               is_game_over: true,
               game_over_reason: turnResult.game_over_reason,
               game_over_summary: turnResult.game_over_summary,
@@ -279,6 +308,14 @@ export default function MainScreen({
               </button>
             </div>
           )}
+          <button
+            type="button"
+            className="btn-chapter-nav"
+            onClick={onNavigateToChapters}
+            title="Open Chapter Progression Roadmap"
+          >
+            <span className="nav-icon">📜</span> Chapters
+          </button>
           <button
             type="button"
             className="btn-graph-nav"
@@ -388,6 +425,28 @@ export default function MainScreen({
             </div>
           )}
 
+          {/* Full-width Interstitial Chapter Transition Card */}
+          {chapterTransition && (
+            <div className="chapter-interstitial-card" role="dialog" aria-label="Chapter Advancement">
+              <div className="interstitial-badge">✨ CHAPTER ADVANCEMENT</div>
+              <h2 className="interstitial-title">{chapterTransition.title}</h2>
+              <div className="interstitial-objective-box">
+                <span className="objective-label">PRIMARY OBJECTIVE</span>
+                <p className="objective-text">{chapterTransition.objective}</p>
+              </div>
+              <div className="interstitial-actions">
+                <button
+                  type="button"
+                  className="btn-primary btn-interstitial-dismiss"
+                  onClick={() => setChapterTransition(null)}
+                >
+                  Continue Journey ➔
+                </button>
+                <span className="interstitial-hint">(Auto-advancing shortly...)</span>
+              </div>
+            </div>
+          )}
+
           {/* Narrative Log & Active Stream Area */}
           <div className="narrative-container">
             {storyTurns.map((turn, idx) => (
@@ -454,12 +513,20 @@ export default function MainScreen({
 
           {/* Action Input Area OR Game-Over End Screen */}
           {sessionState?.is_game_over ? (
-            <div className={`game-over-screen ${sessionState.game_over_reason === 'collapse' ? 'theme-collapse' : 'theme-death'}`}>
+            <div className={`game-over-screen ${sessionState.game_over_reason === 'collapse' ? 'theme-collapse' : sessionState.game_over_reason === 'victory' ? 'theme-victory' : 'theme-death'}`}>
               <div className="game-over-badge">
-                {sessionState.game_over_reason === 'death' ? '☠ MORTAL DEMISE' : '👁 SPIRITUAL COLLAPSE'}
+                {sessionState.game_over_reason === 'victory'
+                  ? '🏆 CAMPAIGN VICTORIOUS'
+                  : sessionState.game_over_reason === 'death'
+                  ? '☠ MORTAL DEMISE'
+                  : '👁 SPIRITUAL COLLAPSE'}
               </div>
               <h2 className="game-over-headline">
-                {sessionState.game_over_reason === 'death' ? 'You Died' : 'You Broke'}
+                {sessionState.game_over_reason === 'victory'
+                  ? "The Reach's End"
+                  : sessionState.game_over_reason === 'death'
+                  ? 'You Died'
+                  : 'You Broke'}
               </h2>
 
               {sessionState.game_over_summary && (
@@ -470,15 +537,23 @@ export default function MainScreen({
 
               <div className="game-over-meta">
                 <div className="meta-card">
-                  <span className="meta-label">FINAL CHAPTER</span>
-                  <span className="meta-val">{sessionState.chapter || session?.chapter}</span>
+                  <span className="meta-label">
+                    {sessionState.game_over_reason === 'victory' ? 'CHAPTERS COMPLETED' : 'FINAL CHAPTER'}
+                  </span>
+                  <span className="meta-val">
+                    {sessionState.game_over_reason === 'victory' ? '4 / 4 (All Complete)' : (sessionState.chapter || session?.chapter)}
+                  </span>
                 </div>
                 <div className="meta-card">
-                  <span className="meta-label">TURNS SURVIVED</span>
+                  <span className="meta-label">
+                    {sessionState.game_over_reason === 'victory' ? 'TOTAL TURNS' : 'TURNS SURVIVED'}
+                  </span>
                   <span className="meta-val">{sessionState.turn_count || 0}</span>
                 </div>
                 <div className="meta-card">
-                  <span className="meta-label">DEMISE AT</span>
+                  <span className="meta-label">
+                    {sessionState.game_over_reason === 'victory' ? 'VICTORY AT' : 'DEMISE AT'}
+                  </span>
                   <span className="meta-val">{sessionState.location || 'The Sunken Crossroads'}</span>
                 </div>
               </div>

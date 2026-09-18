@@ -28,6 +28,7 @@ from sqlalchemy import (
     JSON,
     String,
     Text,
+    event,
     func,
 )
 from sqlalchemy.orm import (
@@ -58,10 +59,38 @@ class GameSession(Base):
         String(255),
         default="Untitled Campaign"
     )
-    chapter: Mapped[str] = mapped_column(
-        String(255),
-        default="Chapter 1: The Drowned Road"
+    chapter_number: Mapped[int] = mapped_column(
+        Integer,
+        default=1
     )
+    completed_chapters: Mapped[list[int]] = mapped_column(
+        JSON,
+        default=list
+    )
+
+    _chapter_display: Mapped[str] = mapped_column(
+        "chapter",
+        String(255),
+        default="Chapter 1: The Drowned Road",
+    )
+
+    @property
+    def chapter(self) -> str:
+        """Derived canonical display title computed dynamically from chapter_number."""
+        from app.chapters import get_chapter_display_title
+        return get_chapter_display_title(self.chapter_number)
+
+    @chapter.setter
+    def chapter(self, val: Optional[str]) -> None:
+        """Permit legacy kwarg passing without drifting out of sync."""
+        if val is None:
+            return
+        import re
+        m = re.search(r"Chapter\s+(\d+)", str(val), re.IGNORECASE)
+        if m:
+            self.chapter_number = int(m.group(1))
+        from app.chapters import get_chapter_display_title
+        self._chapter_display = get_chapter_display_title(self.chapter_number)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now()
@@ -112,6 +141,13 @@ class GameSession(Base):
         back_populates="session",
         cascade="all, delete-orphan"
     )
+
+
+@event.listens_for(GameSession, "before_insert")
+@event.listens_for(GameSession, "before_update")
+def _sync_chapter_display(mapper, connection, target):
+    from app.chapters import get_chapter_display_title
+    target._chapter_display = get_chapter_display_title(target.chapter_number)
 
 
 class StoryNode(Base):

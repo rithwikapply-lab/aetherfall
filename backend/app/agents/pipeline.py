@@ -65,13 +65,14 @@ async def _execute_pipeline(
 ) -> TurnResult:
     client = llm_client or get_llm_client()
 
-    # 1. Load GameSession with eager NPC memories and inventory to prevent MissingGreenlet
+    # 1. Load GameSession with eager NPC memories, inventory, and quests to prevent MissingGreenlet
     stmt = (
         select(GameSession)
         .where(GameSession.id == session_id)
         .options(
             selectinload(GameSession.npcs).selectinload(NPC.memories),
             selectinload(GameSession.inventory),
+            selectinload(GameSession.quests),
         )
     )
     result = await db_session.execute(stmt)
@@ -83,6 +84,11 @@ async def _execute_pipeline(
         raise ValueError(
             f"Cannot execute turn: GameSession '{session_id}' has already ended ({game_session.game_over_reason})."
         )
+
+    # Pre-turn quest status snapshot for deterministic advancement detection
+    pre_turn_quest_statuses = {
+        q.title.strip().lower(): q.status for q in (game_session.quests or [])
+    }
 
     # 2. Determine parent StoryNode (supports branching via from_node_id)
     target_parent_id = from_node_id if from_node_id is not None else game_session.current_node_id
@@ -148,7 +154,23 @@ async def _execute_pipeline(
         llm_client=client,
     )
 
+    # 7. Chapter Progression Advancement Evaluation
+    from app.chapters import process_chapter_advancement, get_chapter
+
+    chapter_advanced = await process_chapter_advancement(
+        db_session=db_session,
+        session=game_session,
+        new_node=new_node,
+        action_text=action_text,
+        narration_text=narration_text,
+        pre_turn_quest_statuses=pre_turn_quest_statuses,
+        llm_client=client,
+    )
+
     await db_session.flush()
+
+    curr_chap = get_chapter(game_session.chapter_number)
+    curr_objective = curr_chap.objective if curr_chap else None
 
     return TurnResult(
         session_id=game_session.id,
@@ -162,6 +184,11 @@ async def _execute_pipeline(
         hp=game_session.hp,
         focus=game_session.focus,
         turn_count=game_session.turn_count,
+        chapter_number=game_session.chapter_number,
+        chapter=game_session.chapter,
+        completed_chapters=game_session.completed_chapters or [],
+        chapter_advanced=chapter_advanced,
+        chapter_objective=curr_objective,
         is_game_over=game_session.is_game_over,
         game_over_reason=game_session.game_over_reason,
         game_over_summary=game_session.game_over_summary,

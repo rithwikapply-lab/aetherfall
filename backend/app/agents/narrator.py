@@ -19,6 +19,7 @@ Your role:
 - Maintain a tone that is grounded, suspenseful, and evocative.
 - If an NPC memory is provided, naturally weave that NPC's attitude or past history into the scene without breaking immersion.
 - Keep the response to 1-3 rich, punchy paragraphs. Do not speak for the player; describe what happens around them and what they perceive.
+- Chapter Objective: Keep the current chapter's objective in mind so the story pulls organically toward it rather than wandering indefinitely. Create opportunities for the player to progress the objective without railroading them into a single correct action.
 """
 
 
@@ -29,11 +30,18 @@ def build_narrator_prompt(
     recalled_memory: Optional[Tuple[NPC, NPCMemoryEntry, float]] = None,
 ) -> str:
     """Construct the contextual prompt for narrative prose generation."""
+    from app.chapters import get_chapter
+
+    chapter_def = get_chapter(session.chapter_number)
+    chapter_obj = chapter_def.objective if chapter_def else None
+
     prompt_parts = [
         f"Campaign: {session.title} | {session.chapter}",
         f"Current Location: {session.location}",
         f"Player Status: HP {session.hp}/{session.max_hp}, Mood: {session.mood}",
     ]
+    if chapter_obj:
+        prompt_parts.append(f"Current Chapter Objective: {chapter_obj}")
 
     if parent_node:
         prompt_parts.append(

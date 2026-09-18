@@ -4,8 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.sessions import router as sessions_router
 from app.config import settings
 from app.database import init_db
-import app.models  # noqa: F401 - Register models with Base.metadata
-from app.schemas import HealthCheckResponse
+from app.schemas import ChapterResponse, HealthCheckResponse
 
 
 @asynccontextmanager
@@ -53,3 +52,9 @@ async def health_check():
         environment=settings.ENVIRONMENT,
         database_configured=bool(settings.DATABASE_URL),
     )
+
+
+@app.get("/api/chapters", response_model=list[ChapterResponse], tags=["chapters"])
+async def get_chapters():
+    from app.chapters import get_all_chapters
+    return [ChapterResponse.model_validate(chap.model_dump()) for chap in get_all_chapters()]

@@ -339,6 +339,30 @@ class MockLLMClient(LLMClient):
         prompt_lower = prompt.lower()
         h = int(hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:8], 16)
 
+        # Explicit quest completion test trigger (checked first)
+        for kw in ("complete quest:", "fulfill quest:"):
+            if kw in prompt_lower:
+                target_title = prompt_lower.split(kw, 1)[1].split("\n", 1)[0].strip().strip('"\'')
+                from app.chapters import get_all_chapters
+                canonical_title = target_title
+                for ch in get_all_chapters():
+                    if ch.completion_quest_title.lower() == target_title.lower():
+                        canonical_title = ch.completion_quest_title
+                        break
+                return response_model(
+                    hp_delta=0,
+                    focus_delta=0,
+                    hp_delta_reason=None,
+                    focus_delta_reason=None,
+                    location=None,
+                    mood="Triumphant",
+                    items_gained=[],
+                    items_lost=[],
+                    npc_relationship_deltas=[],
+                    quests_completed=[canonical_title],
+                    facts_established=[f"Objective accomplished: {canonical_title}."],
+                )
+
         combat_kws = ("attack", "fight", "strike", "hit")
         search_kws = ("search", "look", "examine", "take")
         dialogue_kws = ("ask", "talk", "tell", "speak")
@@ -369,6 +393,7 @@ class MockLLMClient(LLMClient):
                 items_gained=[],
                 items_lost=[],
                 npc_relationship_deltas=[],
+                quests_completed=[],
                 facts_established=[f"Violent conflict erupted during turn ({h % 100})."],
             )
 
@@ -393,6 +418,7 @@ class MockLLMClient(LLMClient):
                 items_gained=[ItemGain(name=chosen_item[0], description=chosen_item[1])],
                 items_lost=[],
                 npc_relationship_deltas=[],
+                quests_completed=[],
                 facts_established=[f"Discovered {chosen_item[0]} while searching."],
             )
 
@@ -424,6 +450,7 @@ class MockLLMClient(LLMClient):
                         memory_note=note,
                     )
                 ],
+                quests_completed=[],
                 facts_established=[f"Conversed with {npc_name}."],
             )
 
@@ -446,6 +473,8 @@ def _generate_mock_value(annotation, field_name: str, seed: str):
 
     # List / list types
     if origin in (list, List):
+        if "quest" in field_name.lower() or "completed" in field_name.lower():
+            return []
         item_type = args[0] if args else str
         item1 = _generate_mock_value(item_type, f"{field_name}_0", seed)
         item2 = _generate_mock_value(item_type, f"{field_name}_1", seed)

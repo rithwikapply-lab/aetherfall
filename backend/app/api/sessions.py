@@ -40,6 +40,7 @@ from app.llm_client import get_llm_client
 from app.models import GameSession, InventoryItem, NPC, Quest, StoryNode
 from app.schemas import (
     ActionRequest,
+    ChapterResponse,
     InventoryItemResponse,
     NPCResponse,
     QuestResponse,
@@ -52,6 +53,7 @@ from app.schemas import (
     StoryNodeSummaryResponse,
     TurnResult,
 )
+from app.chapters import get_all_chapters, get_chapter, process_chapter_advancement
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -72,7 +74,8 @@ async def create_session(request: Optional[SessionCreateRequest] = None):
         session = GameSession(
             id=str(uuid.uuid4()),
             title=title,
-            chapter=chapter,
+            chapter_number=1,
+            completed_chapters=[],
             hp=100,
             max_hp=100,
             focus=50,
@@ -156,10 +159,16 @@ async def get_session_state(session_id: str):
                 detail=f"Session '{session_id}' not found.",
             )
 
+        chap_def = get_chapter(session.chapter_number)
+        chap_obj = chap_def.objective if chap_def else None
+
         return SessionStateResponse(
             id=session.id,
             title=session.title,
             chapter=session.chapter,
+            chapter_number=session.chapter_number,
+            completed_chapters=session.completed_chapters or [],
+            chapter_objective=chap_obj,
             hp=session.hp,
             max_hp=session.max_hp,
             focus=session.focus,
@@ -334,6 +343,7 @@ async def execute_turn_action(session_id: str, request: ActionRequest):
                 .options(
                     selectinload(GameSession.npcs).selectinload(NPC.memories),
                     selectinload(GameSession.inventory),
+                    selectinload(GameSession.quests),
                 )
             )
             result = await db.execute(stmt)
@@ -345,6 +355,11 @@ async def execute_turn_action(session_id: str, request: ActionRequest):
                     data=f"Session has already ended ({active_session.game_over_reason}).",
                 )
                 return
+
+            # Pre-turn quest status snapshot
+            pre_turn_quest_statuses = {
+                q.title.strip().lower(): q.status for q in (active_session.quests or [])
+            }
 
             # 2. Determine parent StoryNode (supports branching via from_node_id)
             target_parent_id = request.from_node_id if request.from_node_id is not None else active_session.current_node_id
@@ -413,10 +428,24 @@ async def execute_turn_action(session_id: str, request: ActionRequest):
                 llm_client=llm_client,
             )
 
+            # 7. Chapter Progression Advancement Evaluation
+            chapter_advanced = await process_chapter_advancement(
+                db_session=db,
+                session=active_session,
+                new_node=new_node,
+                action_text=request.action_text,
+                narration_text=full_narration,
+                pre_turn_quest_statuses=pre_turn_quest_statuses,
+                llm_client=llm_client,
+            )
+
             await db.commit()
             await db.refresh(active_session)
 
-            # 7. Final 'done' event with complete TurnResult JSON payload
+            curr_chap = get_chapter(active_session.chapter_number)
+            curr_obj = curr_chap.objective if curr_chap else None
+
+            # 8. Final 'done' event with complete TurnResult JSON payload
             turn_result = TurnResult(
                 session_id=active_session.id,
                 node_id=new_node.id,
@@ -429,6 +458,11 @@ async def execute_turn_action(session_id: str, request: ActionRequest):
                 hp=active_session.hp,
                 focus=active_session.focus,
                 turn_count=active_session.turn_count,
+                chapter_number=active_session.chapter_number,
+                chapter=active_session.chapter,
+                completed_chapters=active_session.completed_chapters or [],
+                chapter_advanced=chapter_advanced,
+                chapter_objective=curr_obj,
                 is_game_over=active_session.is_game_over,
                 game_over_reason=active_session.game_over_reason,
                 game_over_summary=active_session.game_over_summary,

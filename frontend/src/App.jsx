@@ -2,9 +2,10 @@ import React, { useState } from 'react';
 import LandingScreen from './components/LandingScreen';
 import MainScreen from './components/MainScreen';
 import GraphScreen from './components/GraphScreen';
+import ChapterOverviewScreen from './components/ChapterOverviewScreen';
 
 export default function App() {
-  // Simple local state router: "landing" | "main" | "graph"
+  // Simple local state router: "landing" | "main" | "graph" | "chapters"
   const [view, setView] = useState('landing');
   const [session, setSession] = useState(null);
   const [pendingReplay, setPendingReplay] = useState(null);
@@ -23,6 +24,10 @@ export default function App() {
 
   const handleNavigateToGraph = () => {
     setView('graph');
+  };
+
+  const handleNavigateToChapters = () => {
+    setView('chapters');
   };
 
   const handleNavigateToMain = () => {
@@ -51,6 +56,7 @@ export default function App() {
         <MainScreen
           session={session}
           onNavigateToGraph={handleNavigateToGraph}
+          onNavigateToChapters={handleNavigateToChapters}
           onNewCampaign={handleNewCampaign}
           onStartCampaign={handleStartCampaign}
           pendingReplay={pendingReplay}
@@ -63,6 +69,13 @@ export default function App() {
           session={session}
           onNavigateToMain={handleNavigateToMain}
           onReplayFromNode={handleReplayFromNode}
+        />
+      )}
+
+      {view === 'chapters' && session && (
+        <ChapterOverviewScreen
+          session={session}
+          onNavigateToMain={handleNavigateToMain}
         />
       )}
     </div>

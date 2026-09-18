@@ -20,13 +20,15 @@ async def test_create_session(api_client: AsyncClient):
     """Verify POST /api/sessions initializes a game session and opening root node."""
     res = await api_client.post(
         "/api/sessions",
-        json={"title": "The Northern Marches", "chapter": "Chapter 1: River of Ash"},
+        json={"title": "The Northern Marches", "chapter": "Chapter 1: The Drowned Road"},
     )
     assert res.status_code == 201
     data = res.json()
     assert "id" in data
     assert data["title"] == "The Northern Marches"
-    assert data["chapter"] == "Chapter 1: River of Ash"
+    assert data["chapter"] == "Chapter 1: The Drowned Road"
+    assert data["chapter_number"] == 1
+    assert data["completed_chapters"] == []
     assert data["current_node_id"] is not None
 
 

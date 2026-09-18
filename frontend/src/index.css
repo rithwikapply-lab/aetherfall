@@ -1550,3 +1550,536 @@
     transform: translateY(0);
   }
 }
+
+/* ==============================================================================
+   STAGE B: CHAPTER PROGRESSION, OVERVIEW ROADMAP, AND VICTORY STYLES
+   ============================================================================== */
+
+/* Top Navbar Chapters Nav Button */
+.btn-chapter-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: rgba(229, 184, 105, 0.1);
+  border: 1px solid rgba(229, 184, 105, 0.35);
+  color: var(--accent-gold);
+  padding: 0.4rem 0.85rem;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-chapter-nav:hover {
+  background: rgba(229, 184, 105, 0.2);
+  border-color: var(--accent-gold);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 10px rgba(229, 184, 105, 0.25);
+}
+
+/* Interstitial Chapter Transition Card */
+.chapter-interstitial-card {
+  background: linear-gradient(135deg, rgba(17, 24, 39, 0.97) 0%, rgba(30, 27, 46, 0.95) 100%);
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  border-radius: 8px;
+  padding: 1.25rem 1.75rem;
+  margin-bottom: 1.25rem;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 24px rgba(245, 158, 11, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  animation: interstitialSlideDown 0.4s ease-out;
+}
+
+@keyframes interstitialSlideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.interstitial-badge {
+  align-self: flex-start;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  padding: 0.25rem 0.65rem;
+  border-radius: 20px;
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  color: #fde68a;
+  text-transform: uppercase;
+}
+
+.interstitial-title {
+  font-family: var(--font-serif);
+  font-size: 1.45rem;
+  font-weight: 700;
+  color: #fffbeb;
+  margin: 0;
+  letter-spacing: 0.02em;
+  text-shadow: 0 0 16px rgba(245, 158, 11, 0.4);
+}
+
+.interstitial-objective-box {
+  background: rgba(0, 0, 0, 0.35);
+  border-left: 3px solid var(--accent-gold);
+  padding: 0.65rem 1rem;
+  border-radius: 0 6px 6px 0;
+}
+
+.interstitial-objective-box .objective-label {
+  display: block;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: var(--accent-gold);
+  margin-bottom: 0.2rem;
+}
+
+.interstitial-objective-box .objective-text {
+  font-size: 0.95rem;
+  color: #f1f5f9;
+  margin: 0;
+  line-height: 1.45;
+}
+
+.interstitial-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 0.25rem;
+}
+
+.btn-interstitial-dismiss {
+  padding: 0.5rem 1.35rem;
+  font-size: 0.88rem;
+  background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+  border-color: #f59e0b;
+  box-shadow: 0 3px 12px rgba(217, 119, 6, 0.35);
+  cursor: pointer;
+}
+
+.btn-interstitial-dismiss:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.1);
+}
+
+.interstitial-hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Victory End Screen Theme */
+.theme-victory {
+  background: linear-gradient(180deg, rgba(20, 16, 8, 0.96) 0%, rgba(36, 26, 10, 0.98) 100%);
+  border-color: rgba(245, 158, 11, 0.6);
+  box-shadow: 0 0 45px rgba(245, 158, 11, 0.28), inset 0 0 35px rgba(245, 158, 11, 0.1);
+  animation: victoryGlowPulse 4s ease-in-out infinite alternate;
+}
+
+@keyframes victoryGlowPulse {
+  0% {
+    box-shadow: 0 0 35px rgba(245, 158, 11, 0.2), inset 0 0 25px rgba(245, 158, 11, 0.08);
+  }
+  100% {
+    box-shadow: 0 0 55px rgba(245, 158, 11, 0.4), inset 0 0 45px rgba(245, 158, 11, 0.16);
+  }
+}
+
+.theme-victory .game-over-badge {
+  background: rgba(245, 158, 11, 0.2);
+  border-color: rgba(245, 158, 11, 0.6);
+  color: #fde68a;
+}
+
+.theme-victory .game-over-headline {
+  color: #fffbeb;
+  text-shadow: 0 0 28px rgba(245, 158, 11, 0.7), 0 2px 8px rgba(0, 0, 0, 0.8);
+}
+
+.theme-victory .game-over-summary {
+  border-left-color: rgba(245, 158, 11, 0.6);
+  border-right-color: rgba(245, 158, 11, 0.6);
+}
+
+.theme-victory .btn-game-over-restart {
+  background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+  border-color: #f59e0b;
+  box-shadow: 0 4px 20px rgba(217, 119, 6, 0.4);
+}
+
+.theme-victory .btn-game-over-restart:hover {
+  box-shadow: 0 6px 25px rgba(217, 119, 6, 0.6);
+}
+
+/* ==============================================================================
+   CHAPTER OVERVIEW ROADMAP SCREEN
+   ============================================================================== */
+
+.chapter-overview-container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-primary);
+  background-image:
+    radial-gradient(ellipse at top, rgba(229, 184, 105, 0.04) 0%, transparent 60%),
+    radial-gradient(ellipse at bottom, rgba(74, 158, 255, 0.03) 0%, transparent 60%);
+}
+
+.chapter-overview-content {
+  flex: 1;
+  max-width: 860px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem 4rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.chapter-overview-header {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.chapter-overview-title {
+  font-family: var(--font-serif);
+  font-size: 2.2rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #fffbeb;
+  margin: 0;
+  text-shadow: 0 0 20px rgba(229, 184, 105, 0.35);
+}
+
+.chapter-overview-tagline {
+  font-size: 1.05rem;
+  color: var(--text-secondary);
+  max-width: 600px;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.chapter-loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 4rem 0;
+  color: var(--accent-gold);
+}
+
+/* Timeline Vertical Path */
+.chapter-timeline-roadmap {
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+  position: relative;
+  margin-top: 1rem;
+}
+
+.chapter-timeline-step {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  gap: 1.25rem;
+  align-items: stretch;
+}
+
+/* Timeline Node & Connector */
+.timeline-node-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+}
+
+.timeline-node {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #11151f;
+  border: 2px solid var(--border-medium);
+  z-index: 2;
+  transition: all var(--transition-normal);
+}
+
+.node-icon {
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.timeline-connector-bar {
+  width: 3px;
+  flex: 1;
+  background: rgba(255, 255, 255, 0.08);
+  margin-top: 6px;
+  margin-bottom: 6px;
+  border-radius: 2px;
+  transition: background var(--transition-normal);
+}
+
+.timeline-connector-bar.connector-completed {
+  background: linear-gradient(180deg, #10b981 0%, #059669 100%);
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
+}
+
+/* State: Completed */
+.step-completed .timeline-node {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: #10b981;
+  box-shadow: 0 0 16px rgba(16, 185, 129, 0.35);
+}
+
+.step-completed .check-icon {
+  color: #34d399;
+  font-size: 1.15rem;
+}
+
+.step-completed .chapter-roadmap-card {
+  border-color: rgba(16, 185, 129, 0.3);
+  background: linear-gradient(135deg, rgba(16, 24, 30, 0.85) 0%, rgba(18, 28, 36, 0.75) 100%);
+}
+
+/* State: Current */
+.step-current .timeline-node {
+  background: rgba(245, 158, 11, 0.18);
+  border-color: #f59e0b;
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.5), inset 0 0 10px rgba(245, 158, 11, 0.3);
+  animation: pulseCurrentNode 2.5s infinite alternate;
+}
+
+@keyframes pulseCurrentNode {
+  from {
+    box-shadow: 0 0 14px rgba(245, 158, 11, 0.4);
+  }
+  to {
+    box-shadow: 0 0 26px rgba(245, 158, 11, 0.7), 0 0 8px #fde68a;
+  }
+}
+
+.step-current .active-icon {
+  color: #fbbf24;
+  font-size: 1.2rem;
+}
+
+.step-current .chapter-roadmap-card {
+  border-color: rgba(245, 158, 11, 0.55);
+  background: linear-gradient(135deg, rgba(22, 22, 34, 0.95) 0%, rgba(32, 28, 44, 0.9) 100%);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5), 0 0 22px rgba(245, 158, 11, 0.18);
+}
+
+/* State: Unreached */
+.step-unreached .timeline-node {
+  background: #0d1117;
+  border-color: rgba(255, 255, 255, 0.12);
+  color: var(--text-muted);
+}
+
+.step-unreached .lock-icon {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.step-unreached .chapter-roadmap-card {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(14, 18, 27, 0.6);
+  opacity: 0.75;
+}
+
+/* Roadmap Card Content */
+.chapter-roadmap-card {
+  border: 1px solid var(--border-medium);
+  border-radius: 10px;
+  padding: 1.4rem 1.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  transition: all var(--transition-normal);
+}
+
+.card-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.chapter-sequence-tag {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: var(--accent-gold);
+  text-transform: uppercase;
+}
+
+.chapter-status-pill {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  padding: 0.2rem 0.65rem;
+  border-radius: 20px;
+  text-transform: uppercase;
+}
+
+.pill-completed {
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: #34d399;
+}
+
+.pill-active {
+  background: rgba(245, 158, 11, 0.2);
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  color: #fde68a;
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.25);
+}
+
+.pill-unreached {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-muted);
+}
+
+.chapter-card-title {
+  font-family: var(--font-serif);
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #f8fafc;
+  margin: 0;
+  letter-spacing: 0.02em;
+}
+
+.chapter-objective-box {
+  background: rgba(0, 0, 0, 0.25);
+  padding: 0.65rem 0.9rem;
+  border-radius: 6px;
+  border-left: 2px solid rgba(255, 255, 255, 0.15);
+}
+
+.step-current .chapter-objective-box {
+  border-left-color: var(--accent-gold);
+}
+
+.step-completed .chapter-objective-box {
+  border-left-color: #10b981;
+}
+
+.objective-label {
+  display: block;
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  margin-bottom: 0.15rem;
+}
+
+.objective-text {
+  font-size: 0.92rem;
+  color: #e2e8f0;
+  margin: 0;
+  line-height: 1.45;
+}
+
+/* Active Quest Panel */
+.active-quest-panel {
+  background: rgba(245, 158, 11, 0.07);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 6px;
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.25rem;
+}
+
+.quest-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.quest-key-icon {
+  font-size: 0.9rem;
+}
+
+.quest-panel-title {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #fde68a;
+}
+
+.quest-status-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.15rem 0.45rem;
+  border-radius: 12px;
+  margin-left: auto;
+  text-transform: uppercase;
+}
+
+.badge-active {
+  background: rgba(245, 158, 11, 0.25);
+  color: #fef08a;
+  border: 1px solid rgba(245, 158, 11, 0.45);
+}
+
+.quest-title-display {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #fff;
+  margin: 0;
+}
+
+.quest-panel-desc {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  margin: 0;
+}
+
+.completed-quest-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.82rem;
+  color: #34d399;
+  background: rgba(16, 185, 129, 0.08);
+  padding: 0.5rem 0.85rem;
+  border-radius: 6px;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.unreached-quest-hint {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.chapter-overview-footer {
+  display: flex;
+  justify-content: center;
+  margin-top: 1.5rem;
+}
+
+.btn-return-action {
+  padding: 0.75rem 2rem;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
