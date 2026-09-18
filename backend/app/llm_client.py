@@ -216,8 +216,107 @@ class MockLLMClient(LLMClient):
         temperature: float = 0.2,
     ) -> T:
         """Construct a deterministic Pydantic model instance matching response_model."""
+        if response_model.__name__ == "StateDelta":
+            delta_instance = self._generate_keyword_sensitive_state_delta(prompt, response_model)
+            if delta_instance is not None:
+                return delta_instance
+
         seed = f"{prompt}:{response_model.__name__}"
         return _generate_mock_model(response_model, seed)
+
+    def _generate_keyword_sensitive_state_delta(
+        self,
+        prompt: str,
+        response_model: Type[T],
+    ) -> Optional[T]:
+        """Generate keyword-sensitive state mutations for the StateDelta schema.
+
+        Inspects the prompt text to semantically align mock outputs with player actions:
+        - Combat keywords ('attack', 'fight', 'strike', 'hit') -> damage (hp_change < 0).
+        - Exploration keywords ('search', 'look', 'examine', 'take') -> items_gained populated.
+        - Dialogue keywords ('ask', 'talk', 'tell', 'speak') -> npc_relationship_deltas populated.
+        - Otherwise returns None to fall back to generic hash-based generation.
+        """
+        prompt_lower = prompt.lower()
+        h = int(hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:8], 16)
+
+        combat_kws = ("attack", "fight", "strike", "hit")
+        search_kws = ("search", "look", "examine", "take")
+        dialogue_kws = ("ask", "talk", "tell", "speak")
+
+        is_combat = any(kw in prompt_lower for kw in combat_kws)
+        is_search = any(kw in prompt_lower for kw in search_kws)
+        is_dialogue = any(kw in prompt_lower for kw in dialogue_kws)
+
+        if not (is_combat or is_search or is_dialogue):
+            return None
+
+        from app.schemas import ItemGain, NPCRelationshipDelta
+
+        if is_combat:
+            # Plausible damage range: -1 to -15
+            damage = -((h % 15) + 1)
+            moods = ["Bruised", "Defiant", "Exhausted", "Adrenaline-fueled", "Grim"]
+            return response_model(
+                hp_change=damage,
+                focus_change=-((h % 5) + 1),
+                location=None,
+                mood=moods[h % len(moods)],
+                items_gained=[],
+                items_lost=[],
+                npc_relationship_deltas=[],
+                facts_established=[f"Violent conflict erupted during turn ({h % 100})."],
+            )
+
+        if is_search:
+            item_pool = [
+                ("Rusted Iron Key", "An ancient key encrusted with river silt."),
+                ("Tattered Map Fragment", "A parchment piece outlining forgotten sluice gates."),
+                ("Carved Bone Amulet", "An amulet etched with a protective sigil of the Old Guard."),
+                ("Brass Pocket Compass", "Its needle spins sluggishly in the presence of ancient magic."),
+                ("Vial of Sunken Glow-Moss", "A sealed phial emitting a soft phosphorescent light."),
+            ]
+            chosen_item = item_pool[h % len(item_pool)]
+            return response_model(
+                hp_change=0,
+                focus_change=0,
+                location=None,
+                mood="Inquisitive",
+                items_gained=[ItemGain(name=chosen_item[0], description=chosen_item[1])],
+                items_lost=[],
+                npc_relationship_deltas=[],
+                facts_established=[f"Discovered {chosen_item[0]} while searching."],
+            )
+
+        if is_dialogue:
+            npc_names = ["Kael", "the Ferryman", "the Guard Captain", "the Shadowed Scholar"]
+            npc_name = "Kael" if "kael" in prompt_lower else npc_names[h % len(npc_names)]
+            rel_delta = (h % 11) + 5  # +5 to +15 delta
+            memory_templates = [
+                f"The traveler spoke with measured respect and listened carefully to {npc_name}.",
+                f"{npc_name} noted the traveler's curiosity and felt reassured by their calm demeanor.",
+                f"A brief conversation was shared; {npc_name} judged the traveler trustworthy.",
+            ]
+            note = memory_templates[h % len(memory_templates)]
+            return response_model(
+                hp_change=0,
+                focus_change=0,
+                location=None,
+                mood="Thoughtful",
+                items_gained=[],
+                items_lost=[],
+                npc_relationship_deltas=[
+                    NPCRelationshipDelta(
+                        npc_name=npc_name,
+                        delta=rel_delta,
+                        memory_note=note,
+                    )
+                ],
+                facts_established=[f"Conversed with {npc_name}."],
+            )
+
+        return None
+
 
 
 def _generate_mock_value(annotation, field_name: str, seed: str):
