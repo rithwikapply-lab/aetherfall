@@ -221,6 +221,21 @@ class MockLLMClient(LLMClient):
             if delta_instance is not None:
                 return delta_instance
 
+        if response_model.__name__ == "ContinuityResult":
+            if "simulate contradiction" in prompt.lower() or "force contradiction" in prompt.lower():
+                return response_model(
+                    has_contradiction=True,
+                    contradicting_claim="The bridge stood intact above the churning waters.",
+                    established_fact="the bridge is out",
+                    reason="Narration claims the bridge is intact, violating established fact that the bridge is out."
+                )
+            return response_model(
+                has_contradiction=False,
+                contradicting_claim=None,
+                established_fact=None,
+                reason="Narrative maintains continuity with established world facts."
+            )
+
         seed = f"{prompt}:{response_model.__name__}"
         return _generate_mock_model(response_model, seed)
 

@@ -44,3 +44,38 @@ class StateDelta(BaseModel):
         default_factory=list,
         description="New canonical world facts established this turn"
     )
+
+
+class ContinuityResult(BaseModel):
+    """Output from the Continuity Guard checking narration against established world facts."""
+    has_contradiction: bool = Field(default=False, description="Whether narration contradicts prior facts")
+    contradicting_claim: Optional[str] = Field(default=None, description="The specific sentence in narration that conflicts")
+    established_fact: Optional[str] = Field(default=None, description="The established ancestor fact that was violated")
+    reason: Optional[str] = Field(default=None, description="Explanation of why this is a continuity contradiction")
+
+
+class RecalledMemory(BaseModel):
+    """An NPC memory retrieved during turn context generation."""
+    npc_name: str
+    npc_id: str
+    memory_id: str
+    content: str
+    salience: int
+    score: float
+
+
+class TurnResult(BaseModel):
+    """Aggregated outcome of a single completed turn across the 4-agent pipeline."""
+    session_id: str
+    node_id: str
+    parent_id: Optional[str]
+    turn_number: int
+    narration: str
+    player_action: Optional[str]
+    location: str
+    mood: str
+    hp: int
+    focus: int
+    state_delta: StateDelta
+    continuity: ContinuityResult
+    recalled_memory: Optional[RecalledMemory] = None
