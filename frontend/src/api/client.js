@@ -132,8 +132,8 @@ export async function streamTurnAction(sessionId, {
 
     const processEventBlock = (block) => {
       if (!block.trim()) return;
-      const lines = block.split('\n');
-      let eventType = null;
+      const lines = block.split(/\r?\n/);
+      let eventType = 'message';
       const dataLines = [];
 
       for (const rawLine of lines) {
@@ -170,11 +170,14 @@ export async function streamTurnAction(sessionId, {
       if (done) break;
 
       buffer += decoder.decode(value, { stream: true });
-      const eventBlocks = buffer.split('\n\n');
-      // Keep incomplete trailing fragment in buffer
-      buffer = eventBlocks.pop() || '';
 
-      for (const block of eventBlocks) {
+      // Scan and extract all complete event blocks delimited by CRLF CRLF (\r\n\r\n) or LF LF (\n\n)
+      let boundaryIndex;
+      while ((boundaryIndex = buffer.search(/\r?\n\r?\n/)) !== -1) {
+        const isCrlf = buffer.substr(boundaryIndex, 4) === '\r\n\r\n';
+        const delimiterLength = isCrlf ? 4 : 2;
+        const block = buffer.slice(0, boundaryIndex);
+        buffer = buffer.slice(boundaryIndex + delimiterLength);
         processEventBlock(block);
       }
     }
@@ -182,6 +185,7 @@ export async function streamTurnAction(sessionId, {
     // Process any remaining event left in buffer on stream completion
     if (buffer.trim()) {
       processEventBlock(buffer);
+      buffer = '';
     }
   } catch (err) {
     console.error('[SSE Action Stream Error]:', err);
