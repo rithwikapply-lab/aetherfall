@@ -13,9 +13,11 @@ const NODE_RADIUS = 30;
 const CANVAS_W = 900;
 const CANVAS_H = 600;
 const FORCE_ITERS = 80;
-const REPULSION = 8000;
+const REPULSION = 22000;
 const ATTRACTION = 0.04;
-const DAMPING = 0.85;
+const SPRING_LENGTH = 150;
+const CENTER_GRAVITY = 0.005;
+const DAMPING = 0.82;
 
 /**
  * Spring-repulsion force-directed layout (synchronous, runs in useMemo).
@@ -27,22 +29,17 @@ function forceLayout(nodes, edges) {
     return { [nodes[0].id]: { x: CANVAS_W / 2, y: CANVAS_H / 2 } };
   }
 
-  // Circle initialisation so force converges predictably
+  // Circle initialisation — larger radius so nodes start spread out
   const positions = {};
   const velocities = {};
   nodes.forEach((n, i) => {
     const angle = (2 * Math.PI * i) / nodes.length;
     positions[n.id] = {
-      x: CANVAS_W / 2 + 180 * Math.cos(angle),
+      x: CANVAS_W / 2 + 220 * Math.cos(angle),
       y: CANVAS_H / 2 + 180 * Math.sin(angle),
     };
     velocities[n.id] = { x: 0, y: 0 };
   });
-
-  // Build adjacency set for edge attraction
-  const edgeSet = new Set(edges.map((e) => `${e.source_id}|${e.target_id}`));
-  const isConnected = (a, b) =>
-    edgeSet.has(`${a}|${b}`) || edgeSet.has(`${b}|${a}`);
 
   for (let iter = 0; iter < FORCE_ITERS; iter++) {
     const forces = {};
@@ -69,17 +66,28 @@ function forceLayout(nodes, edges) {
       }
     }
 
-    // Attraction along edges
+    // Attraction along edges (Hooke's spring with ideal length)
     edges.forEach((e) => {
       const a = positions[e.source_id];
       const b = positions[e.target_id];
       if (!a || !b) return;
       const dx = b.x - a.x;
       const dy = b.y - a.y;
-      forces[e.source_id].x += ATTRACTION * dx;
-      forces[e.source_id].y += ATTRACTION * dy;
-      forces[e.target_id].x -= ATTRACTION * dx;
-      forces[e.target_id].y -= ATTRACTION * dy;
+      const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+      const displacement = dist - SPRING_LENGTH;
+      const springForce = ATTRACTION * displacement;
+      const fx = springForce * (dx / dist);
+      const fy = springForce * (dy / dist);
+      forces[e.source_id].x += fx;
+      forces[e.source_id].y += fy;
+      forces[e.target_id].x -= fx;
+      forces[e.target_id].y -= fy;
+    });
+
+    // Gentle pull toward center so disconnected or unvisited nodes don't wander off
+    nodes.forEach((n) => {
+      forces[n.id].x += CENTER_GRAVITY * (CANVAS_W / 2 - positions[n.id].x);
+      forces[n.id].y += CENTER_GRAVITY * (CANVAS_H / 2 - positions[n.id].y);
     });
 
     // Integrate
@@ -90,7 +98,7 @@ function forceLayout(nodes, edges) {
       positions[n.id].y += velocities[n.id].y;
 
       // Clamp to canvas with padding
-      const pad = NODE_RADIUS + 20;
+      const pad = NODE_RADIUS + 35;
       positions[n.id].x = Math.max(pad, Math.min(CANVAS_W - pad, positions[n.id].x));
       positions[n.id].y = Math.max(pad, Math.min(CANVAS_H - pad, positions[n.id].y));
     });

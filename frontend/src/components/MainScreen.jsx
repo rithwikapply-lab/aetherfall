@@ -126,6 +126,16 @@ export default function MainScreen({
     }
   }, [pendingReplay, onClearPendingReplay]);
 
+  // Initial load: fetch map data so minimap shows immediately on resume
+  useEffect(() => {
+    if (!session?.id) return;
+    let isMounted = true;
+    getWorldMap(session.id)
+      .then((mapData) => { if (isMounted) setMinimapData(mapData); })
+      .catch(() => {}); // non-critical
+    return () => { isMounted = false; };
+  }, [session?.id]);
+
   // Persist latest active session state to localStorage for landing resume
   useEffect(() => {
     if (sessionState?.id) {
@@ -834,15 +844,18 @@ function MinimapSVG({ mapData }) {
     (n) => n.id === currentNode.id || connectedIds.has(n.id)
   ).slice(0, 5); // cap at 5 to avoid cramping
 
-  // Simple radial arrangement: current in center, neighbours around
+  // Radial arrangement: current in center, neighbours spaced around
   const positions = {};
   positions[currentNode.id] = { x: W / 2, y: H / 2 };
   const neighbours = visibleNodes.filter((n) => n.id !== currentNode.id);
   neighbours.forEach((n, i) => {
-    const angle = (2 * Math.PI * i) / (neighbours.length || 1) - Math.PI / 2;
+    const angle =
+      neighbours.length === 1
+        ? Math.PI // place single neighbour horizontally to the left
+        : (2 * Math.PI * i) / neighbours.length - Math.PI / 2;
     positions[n.id] = {
-      x: W / 2 + 55 * Math.cos(angle),
-      y: H / 2 + 45 * Math.sin(angle),
+      x: W / 2 + 60 * Math.cos(angle),
+      y: H / 2 + (neighbours.length === 1 ? 0 : 38 * Math.sin(angle)),
     };
   });
 
