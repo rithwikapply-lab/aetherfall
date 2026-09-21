@@ -5,6 +5,8 @@ export default function LandingScreen({
   onStartCampaign,
   onResumeCampaign,
   existingSession,
+  isResuming = false,
+  resumeError = null,
 }) {
   const [chapters, setChapters] = useState([]);
   const [loadingChapters, setLoadingChapters] = useState(true);
@@ -181,22 +183,35 @@ export default function LandingScreen({
                 type="button"
                 className="btn-secondary hero-btn-resume"
                 onClick={() => handleResume()}
-                disabled={isStarting}
+                disabled={isStarting || isResuming}
               >
                 <span className="resume-icon">➔</span>
                 <span className="resume-text">
-                  Resume Campaign
-                  {existingSession.chapter ? ` (${existingSession.chapter.split(':')[0]})` : ''}
+                  {isResuming ? (
+                    'Resuming Expedition…'
+                  ) : (
+                    <>
+                      Resume Campaign
+                      {existingSession.chapter ? ` (${existingSession.chapter.split(':')[0]})` : ''}
+                    </>
+                  )}
                 </span>
               </button>
             )}
           </div>
 
-          {existingSession && (
+          {resumeError && (
+            <div className="landing-error-banner" role="alert" style={{ marginTop: '1rem', color: '#ff6b6b' }}>
+              ⚠️ {resumeError}
+            </div>
+          )}
+
+          {existingSession && !resumeError && (
             <div className="hero-session-preview">
               <span className="preview-label">ACTIVE EXPEDITION:</span>
               <span className="preview-val">
-                {existingSession.location || 'The Drowned Valley'} • Turn {existingSession.turn_count || 0} • {existingSession.hp ?? 100} HP
+                {existingSession.title || 'The Chronicles of Aetherfall'}
+                {existingSession.chapter ? ` • ${existingSession.chapter}` : ''}
               </span>
             </div>
           )}

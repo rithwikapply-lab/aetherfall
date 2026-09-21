@@ -4,12 +4,15 @@ import MainScreen from './components/MainScreen';
 import GraphScreen from './components/GraphScreen';
 import ChapterOverviewScreen from './components/ChapterOverviewScreen';
 import WorldMapScreen from './components/WorldMapScreen';
+import { getSessionState } from './api/client';
 
 export default function App() {
   // Simple local state router: "landing" | "main" | "graph" | "chapters" | "map"
   const [view, setView] = useState('landing');
   const [session, setSession] = useState(null);
   const [pendingReplay, setPendingReplay] = useState(null);
+  const [isResuming, setIsResuming] = useState(false);
+  const [resumeError, setResumeError] = useState(null);
   const [lastSession, setLastSession] = useState(() => {
     try {
       const saved = localStorage.getItem('aetherfall_last_session');
@@ -21,11 +24,17 @@ export default function App() {
 
   const handleStartCampaign = (newSession, initialAction = null) => {
     setSession(newSession);
-    setLastSession(newSession);
+    // Persist only non-authoritative cosmetic pointer (id + display hints)
+    const minimalPointer = {
+      id: newSession.id,
+      title: newSession.title,
+      chapter: newSession.chapter,
+    };
+    setLastSession(minimalPointer);
     try {
-      localStorage.setItem('aetherfall_last_session', JSON.stringify(newSession));
+      localStorage.setItem('aetherfall_last_session', JSON.stringify(minimalPointer));
     } catch (e) {
-      console.warn('Unable to save session to localStorage:', e);
+      console.warn('Unable to save session pointer to localStorage:', e);
     }
     if (initialAction) {
       setPendingReplay({
@@ -38,23 +47,51 @@ export default function App() {
     setView('main');
   };
 
-  const handleResumeCampaign = (sessionToResume, initialAction = null) => {
-    setSession(sessionToResume);
-    if (initialAction) {
-      setPendingReplay({
-        fromNodeId: null,
-        defaultActionText: initialAction,
-      });
-    } else {
-      setPendingReplay(null);
+  const handleResumeCampaign = async (sessionPointer, initialAction = null) => {
+    if (!sessionPointer?.id) return;
+    setIsResuming(true);
+    setResumeError(null);
+    try {
+      // Authoritative database fetch: world state lives in database rows, never in client storage
+      const freshState = await getSessionState(sessionPointer.id);
+      setSession(freshState);
+      const minimalPointer = {
+        id: freshState.id,
+        title: freshState.title,
+        chapter: freshState.chapter,
+      };
+      setLastSession(minimalPointer);
+      try {
+        localStorage.setItem('aetherfall_last_session', JSON.stringify(minimalPointer));
+      } catch {}
+
+      if (initialAction) {
+        setPendingReplay({
+          fromNodeId: null,
+          defaultActionText: initialAction,
+        });
+      } else {
+        setPendingReplay(null);
+      }
+      setView('main');
+    } catch (err) {
+      console.error('Failed to resume session from database:', err);
+      // Purge invalid/stale pointer from localStorage so client does not retain ghost pointer
+      try {
+        localStorage.removeItem('aetherfall_last_session');
+      } catch {}
+      setLastSession(null);
+      setResumeError('Previous campaign could not be found in the database. Please start a new campaign.');
+    } finally {
+      setIsResuming(false);
     }
-    setView('main');
   };
 
   const handleNewCampaign = () => {
-    // Keep lastSession in localStorage so player can still resume if desired
+    // Keep minimal lastSession pointer in localStorage so player can still resume if desired
     setSession(null);
     setPendingReplay(null);
+    setResumeError(null);
     setView('landing');
   };
 
@@ -92,7 +129,9 @@ export default function App() {
         <LandingScreen
           onStartCampaign={handleStartCampaign}
           onResumeCampaign={handleResumeCampaign}
-          existingSession={session || lastSession}
+          existingSession={lastSession}
+          isResuming={isResuming}
+          resumeError={resumeError}
         />
       )}
 

@@ -17,7 +17,8 @@ export default function MainScreen({
   pendingReplay, // { fromNodeId, defaultActionText } if returning from Graph screen
   onClearPendingReplay,
 }) {
-  const [sessionState, setSessionState] = useState(null);
+  // Initialize with authoritative session data if passed from fresh backend fetch
+  const [sessionState, setSessionState] = useState(session || null);
   const [storyTurns, setStoryTurns] = useState([]);
   const [currentStreamingText, setCurrentStreamingText] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
@@ -136,7 +137,7 @@ export default function MainScreen({
     return () => { isMounted = false; };
   }, [session?.id]);
 
-  // Persist latest active session state to localStorage for landing resume
+  // Persist minimal non-authoritative cosmetic pointer for landing screen button
   useEffect(() => {
     if (sessionState?.id) {
       try {
@@ -146,21 +147,13 @@ export default function MainScreen({
             id: sessionState.id,
             title: sessionState.title,
             chapter: sessionState.chapter,
-            chapter_number: sessionState.chapter_number,
-            location: sessionState.location,
-            turn_count: sessionState.turn_count || 0,
-            hp: sessionState.hp,
-            max_hp: sessionState.max_hp,
-            focus: sessionState.focus,
-            max_focus: sessionState.max_focus,
-            is_game_over: sessionState.is_game_over,
           })
         );
       } catch (e) {
-        console.warn('Unable to persist session to localStorage:', e);
+        console.warn('Unable to persist session pointer to localStorage:', e);
       }
     }
-  }, [sessionState]);
+  }, [sessionState?.id, sessionState?.title, sessionState?.chapter]);
 
   // Execute player action via SSE streaming
   const handleActionSubmit = async (e) => {
