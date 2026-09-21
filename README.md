@@ -2,26 +2,26 @@
 
 > **An AI Dungeon Master engine where the world is a relational database, not a chat transcript.**
 
-Aetherfall is an interactive dark-fantasy narrative engine built with **FastAPI**, **SQLAlchemy 2.0 (Async ORM)**, and **React**. Rather than appending player prompts and model responses into an ever-expanding conversational context window, Aetherfall models world state as discrete, normalized database entities (`GameSession`, `StoryNode`, `InventoryItem`, `Quest`, `NPC`, and `NPCMemoryEntry`). 
+Aetherfall is an interactive dark-fantasy game engine built with **FastAPI**, **SQLAlchemy 2.0 (Async ORM)**, and **React**. Most LLM text games maintain world state by feeding an ever-growing conversation history back into the prompt on each turn. Aetherfall instead models the world using relational database tables (`GameSession`, `StoryNode`, `InventoryItem`, `Quest`, `NPC`, and `NPCMemoryEntry`).
 
-Player choices form an explicit directed tree of `StoryNode` records linked by self-referential `parent_id` foreign keys. This architectural foundation enables branching timeline forks, strict canon continuity enforcement, explainable NPC memory retrieval, and a dynamic physical world map—capabilities that cannot be reliably achieved with single-prompt chatbot wrappers.
+Player choices are stored as a directed tree of `StoryNode` rows linked by self-referential `parent_id` foreign keys. Structuring state this way makes timeline branching, canon contradiction checking, explainable NPC memory retrieval, and physical world map derivation straightforward database operations rather than prompt engineering problems.
 
 ---
 
 ## 1. Why A Relational Database Over Chat Transcripts?
 
-Most LLM-based interactive fiction applications operate as "chat wrappers": every turn appends the player's action and the model's prose to an ongoing text transcript passed into the next generation. This pattern degrades under three fundamental architectural failure modes:
+Most LLM interactive fiction tools work as chat wrappers: each turn appends the player's action and the model's response to an ongoing text transcript, then sends the whole transcript back to the model on the next turn. That approach breaks down in three concrete ways as a game goes on:
 
-1. **Context Window Degradation & Token Inflation**: History length grows quadratically with turn count, quickly hitting model context limits, ballooning latency, and driving up inference costs.
-2. **Context Drift & Hallucinations**: World facts established 20 turns prior dilute among thousands of tokens. The model forgets inventory items, revives deceased characters, or contradicts established canon because facts are merely unindexed tokens in a prompt string.
-3. **Impossibility of Branching**: In a flat transcript, exploring an alternative choice requires destructively truncating history. You cannot maintain simultaneous alternate branches or rewind to an earlier fork point without corrupting the timeline.
+1. **Context Window & Latency Growth**: The prompt grows with every turn. Longer turns mean higher token counts, higher per-turn API costs, and noticeably slower response times.
+2. **Context Dilution & Hallucinations**: World facts established 20 turns earlier get buried under thousands of tokens of intervening prose. Without explicit tracking, models drop inventory items, contradict dead NPCs, or forget earlier plot events because the facts only exist as unstructured text in context.
+3. **Destructive Branching**: With a flat transcript, exploring an alternate choice requires truncating conversation history back to the decision point. Superseded paths are lost, and you cannot easily inspect or switch between divergent branches.
 
-In Aetherfall, **the database is the single source of truth**:
-- **Branching is an Explicit Tree**: Every turn creates an immutable `StoryNode` with a `parent_id`. Replaying from an earlier turn forks a sibling node under that ancestor, preserving superseded branches in the database without data loss.
-- **State Mutations are Atomic**: HP, Focus, inventory mutations, quest progression, and NPC sentiments are extracted via structured tool calling into a Pydantic `StateDelta` and committed atomically inside an ACID transaction.
-- **Canon Continuity is Enforced**: A dedicated Continuity Guard traverses the ancestor chain of the active branch to detect and reject narrative contradictions before committing to the database.
-- **Memory is Queryable & Explainable**: NPCs maintain discrete memory records scored by lexical overlap, recency decay, and salience, rather than relying on an LLM to attend over a noisy transcript.
-- **Physical Travel is Separated from Narrative Flow**: A distinct physical World Map graph is derived from active-branch location transitions, separate from the narrative story tree.
+Aetherfall treats database tables—not the model's context window—as the source of truth for the game world:
+- **Explicit Branching Tree**: Each turn inserts an immutable `StoryNode` pointing to its `parent_id`. Branching from an earlier turn creates a new sibling node under that ancestor, leaving superseded branches intact in the database.
+- **Atomic State Mutations**: Player HP, focus, inventory changes, quest states, and NPC attitudes are extracted from narration into a validated Pydantic `StateDelta` schema, then committed in a single database transaction.
+- **Canon Continuity Checks**: Before committing a turn, a Continuity Guard walks the active branch's ancestor nodes in the database to verify new narration doesn't contradict established facts.
+- **Queryable NPC Memory**: Rather than asking the model to recall earlier interactions from raw prose, NPCs store distinct memory rows scored on lexical overlap, recency, and salience.
+- **Separation of Physical and Narrative Graphs**: Narrative choices live in the `StoryNode` tree, while physical geographic movement is computed separately into a travel graph for the World Map.
 
 ---
 
@@ -170,9 +170,9 @@ While the **Story Graph** tracks narrative choice branches, the **World Map** tr
   - **Mentioned / Unvisited Nodes**: Extracted from `story_nodes.locations_mentioned` (places spoken of in narration or dialogue but not yet physically reached). Rendered as distinct dashed-outline nodes.
 - **Hooke's-Law Force-Directed Layout**:
   Implemented in pure SVG/JS in [`frontend/src/components/WorldMapScreen.jsx`](frontend/src/components/WorldMapScreen.jsx). Solves equilibrium node positions using:
-  - **Pairwise Repulsion**: Coulomb-like repulsion ($F_{rep} = \frac{k_{rep}}{d^2}$) keeping all nodes well separated.
-  - **Edge Spring Attraction**: Hooke's-law spring force ($F_{spr} = k_{spr} \cdot (d - L_{0})$) with rest length $L_0 = 150\text{px}$, keeping connected locations at a readable distance without overlapping.
-  - **Center Gravity**: Subtle gravitational pull towards canvas center ($F_{cen} = k_{cen} \cdot (c - p)$), preventing unvisited or disconnected nodes from drifting to canvas boundaries.
+  - **Pairwise Repulsion**: Coulomb-like node repulsion where repulsive force falls off with the square of the distance, keeping unrelated locations well separated.
+  - **Edge Spring Attraction**: Hooke's-law spring attraction along travel edges with a 150px rest length, pulling connected locations toward a readable spacing without overlapping.
+  - **Center Gravity**: A weak centering force proportional to displacement from canvas midpoint, preventing unvisited or disconnected nodes from drifting off-screen.
 - **Sidebar Minimap**:
   Embedded in the main gameplay screen ([`frontend/src/components/MainScreen.jsx`](frontend/src/components/MainScreen.jsx)). Dynamically renders the player's immediate geographic neighbourhood (current location + immediate neighbours with pulsing ring) and expands to the full map on click.
 
@@ -213,7 +213,7 @@ The NPC Memory Agent uses pure-Python lexical scoring (Jaccard similarity on non
 This is a **deliberate architectural decision**, not a shortcut:
 
 1. **Deterministic Explainability**: Neural embeddings produce opaque cosine similarity floats that cannot explain *why* a memory was triggered. In Aetherfall, memory recall is completely explainable: you can inspect the exact token overlap between `"river bridge rations"` in the player's action and the NPC's memory record.
-2. **Zero External Dependencies**: Running a vector database requires embedding APIs, network latency, or local embedding models (e.g. PyTorch / sentence-transformers). Pure lexical scoring runs entirely offline with zero dependencies, executing in sub-millisecond time.
+2. **Zero External Dependencies**: Running a vector database requires embedding APIs, network latency, or local embedding models (e.g. PyTorch / sentence-transformers). Pure lexical scoring runs entirely offline in pure Python with zero external service dependencies or embedding latency.
 3. **Comprehensive Unit Testing**: Pure lexical scoring allows the entire memory retrieval, thresholding, and recency decay pipeline to be tested in standard unit tests without spinning up vector stores or mocking embedding calls.
 4. **Clean Swap Boundary**: The module exposes clean functions (`retrieve_relevant` and `best_recall`). If semantic embedding search is desired in the future, only the internal `score_memory` function needs modification—the four-agent pipeline and calling code remain completely unchanged.
 
@@ -247,15 +247,14 @@ cd backend
 
 ## 6. Known Limitations & Trade-offs
 
-In the spirit of transparent engineering documentation:
+Engineering trade-offs and known constraints in the current implementation:
 
-1. **Client-Side Synchronous Force Layout**: The force-directed graph calculation in `WorldMapScreen.jsx` runs synchronously in React's `useMemo` (80 iterations of pairwise repulsion and spring forces). For typical campaigns (up to 30 locations), it executes in under 2ms. However, for massive campaigns with hundreds of locations, an $O(V^2 + E)$ synchronous simulation would block the main UI thread and would require offloading to a Web Worker or stepping through an asynchronous requestAnimationFrame simulation loop.
+1. **Client-Side Synchronous Force Layout**: The force-directed graph calculation in `WorldMapScreen.jsx` runs synchronously in React's `useMemo` (80 iterations of pairwise repulsion and spring forces). At typical campaign scales (up to 30 locations), layout completes synchronously within a single render frame without noticeable stutter. However, for massive graphs with hundreds of locations, an O(V² + E) synchronous simulation would block the main UI thread and would require offloading to a Web Worker or stepping through an asynchronous requestAnimationFrame loop.
 2. **Active-Path Only Cartography**: `GET /api/sessions/{id}/map` derives visited locations and travel edges *strictly* from the active leaf's direct ancestor chain (`path` StoryNodes). If a player explores a location on Branch A, then rewinds to Turn 1 and takes Branch B, locations visited only in Branch A are excluded from the current map view. A global "omniscient" map encompassing abandoned branches is not currently aggregated.
 3. **Orbiting Unvisited Locations**: Mentioned-but-unvisited locations (e.g. rumors of "Bone Quay") are derived without known topological coordinates or edges, so they sit as unanchored nodes in the outer force field rather than attaching to a defined road.
 4. **MockLLMClient Narration is Deterministic**: In offline mode, `MockLLMClient` generates templated, deterministic prose derived from action hashes and keywords. It proves that async generators, SSE streaming, and structured schema extraction work end-to-end, but lacks the emergent prose of a live foundation model.
 5. **Redis is Provisioned But Unwired**: Redis 7 is configured in `docker-compose.yml` to demonstrate multi-container orchestration, but session caching and pub/sub message queuing are not yet wired into the FastAPI backend (state currently resides directly in PostgreSQL/SQLite).
 6. **No Multi-Tenant Authentication**: Sessions are partitioned by UUID, but there is no user login system or row-level access control.
-7. **The CRLF SSE Parser Bug**: During early playtesting, `buffer.split('\n\n')` failed on Windows/HTTP-standard `\r\n\r\n` line endings from uvicorn, causing chunks to buffer indefinitely before crashing JSON parsing. The bug was resolved by updating the client parser to scan for `/\r?\n\r?\n/` boundaries.
 
 ---
 
@@ -267,4 +266,4 @@ In the spirit of transparent engineering documentation:
 - **Four-Chapter Campaign Progression System**: Implemented canonical chapter objectives, quest-driven transitions, and victory conditions in [`backend/app/chapters.py`](backend/app/chapters.py), driving chapter-aware narrator prompting and dynamic world map coloring ([`backend/tests/test_chapters.py`](backend/tests/test_chapters.py)).
 - **Explainable Lexical Memory Scoring**: Designed a pure-Python NPC memory retrieval system combining tokenized non-stopword Jaccard overlap, salience normalization, and recency decay without external vector database dependencies in [`backend/tests/test_npc_memory.py`](backend/tests/test_npc_memory.py).
 - **Custom SSE-Over-POST Transport**: Hand-crafted a streaming Server-Sent Events parser over HTTP POST in [`frontend/src/api/client.js`](frontend/src/api/client.js) adhering to the W3C single-leading-space rule, handling `\r\n\r\n` boundary edge cases without corrupting whitespace.
-- **Multi-Provider LLM Abstraction with Native Structured Outputs**: Implemented a unified `LLMClient` supporting Anthropic Claude, Google Gemini, and offline `MockLLMClient` with schema-enforced Pydantic output validation and automated runtime fallback in [`backend/tests/test_llm_client.py`](backend/tests/test_llm_client.py).
+- **Multi-Provider LLM Abstraction with Native Structured Outputs**: Implemented a unified `LLMClient` supporting Anthropic Claude, Google Gemini, and offline `MockLLMClient` with schema-enforced Pydantic output validation and environment-based provider precedence resolution in [`backend/tests/test_llm_client.py`](backend/tests/test_llm_client.py).
